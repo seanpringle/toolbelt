@@ -427,7 +427,7 @@ dict_create (dict_cb_hash hash, dict_cb_cmp compare)
 }
 
 void
-dict_free (dict_t *dict)
+dict_empty (dict_t *dict)
 {
   for (int i = 0; i < PRIME_1000; i++)
   {
@@ -438,6 +438,12 @@ dict_free (dict_t *dict)
       release(node, sizeof(dict_node_t));
     }
   }
+}
+
+void
+dict_free (dict_t *dict)
+{
+  dict_empty(dict);
   free(dict);
 }
 
