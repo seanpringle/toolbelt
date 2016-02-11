@@ -1,6 +1,23 @@
 #include "toolbelt.c"
 
 int
+dict_cmp_int (void *a, void *b)
+{
+  int ai = *((int*)a);
+  int bi = *((int*)b);
+  if (ai < bi) return -1;
+  if (ai > bi) return -1;
+  return 0;
+}
+
+uint32_t
+dict_hash_int (void *a)
+{
+  int ai = *((int*)a);
+  return ai;
+}
+
+int
 main (int argc, char *argv[])
 {
   char *item;
@@ -46,7 +63,25 @@ main (int argc, char *argv[])
   dict_set(dict, "fu", "bar");
 
   ensure((item = dict_get(dict, "hello")) && !strcmp(item, "world"))
-    errorf("dict_get");
+    errorf("dict_get 1");
+
+  dict_free(dict);
+
+  dict = dict_create(dict_hash_int, dict_cmp_int);
+
+  int i1 = 1;
+  int i2 = 2;
+  int i3 = 3;
+  int i4 = 4;
+
+  dict_set(dict, &i1, &i2);
+  dict_set(dict, &i3, &i4);
+
+  ensure(dict_get(dict, &i1) == &i2)
+    errorf("dict_get 2");
+
+  ensure(dict_get(dict, &i4) == NULL)
+    errorf("dict_get 3");
 
   dict_free(dict);
 
