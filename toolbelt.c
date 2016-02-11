@@ -292,6 +292,7 @@ typedef uint32_t (*dict_cb_hash)(void*);
 typedef struct _dict_node_t {
   void *key;
   void *val;
+  uint32_t hash;
   struct _dict_node_t *next;
 } dict_node_t;
 
@@ -327,7 +328,8 @@ int
 dict_set (dict_t *dict, void *key, void *val)
 {
   int rc = 1;
-  int chain = dict->hash(key) % PRIME_1000;
+  uint32_t hv = dict->hash(key);
+  int chain = hv % PRIME_1000;
 
   dict_node_t *node = dict->chains[chain];
   while (node && !dict->compare(node->key, key))
@@ -336,6 +338,7 @@ dict_set (dict_t *dict, void *key, void *val)
   if (!node)
   {
     node = allocate(sizeof(dict_node_t));
+    node->hash = hv;
     node->next = dict->chains[chain];
     dict->chains[chain] = node;
     dict->count++;
@@ -406,7 +409,7 @@ dict_next (dict_t *dict, dict_node_t *node)
   if (node->next)
     return node->next;
 
-  uint32_t hv = dict->hash(node->key);
+  uint32_t hv = node->hash;
 
   for (int i = (hv % PRIME_1000)+1; i < PRIME_1000; i++)
     if (dict->chains[i]) return dict->chains[i];
