@@ -25,13 +25,16 @@
 
 #define ensure(x) for ( ; !(x) ; exit(EXIT_FAILURE) )
 #define errorf(...) do { fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); } while(0)
+#define unless(c) if (!(c))
 
 typedef int (*callback)(void*);
 
 void*
 allocate (size_t bytes)
 {
-  return malloc(bytes);
+  void *ptr = malloc(bytes);
+  ensure(ptr) errorf("malloc %lu", bytes);
+  return ptr;
 }
 
 void
@@ -76,18 +79,20 @@ mprintf (const char *pattern, ...)
 
 typedef int (*str_cb_ischar)(int);
 
-char*
+int
 str_skip (const char *s, str_cb_ischar cb)
 {
+  const char *p = s;
   while (s && *s && cb(*s)) s++;
-  return (char*)s;
+  return s - p;
 }
 
-char*
+int
 str_scan (const char *s, str_cb_ischar cb)
 {
+  const char *p = s;
   while (s && *s && !cb(*s)) s++;
-  return (char*)s;
+  return s - p;
 }
 
 int
@@ -170,10 +175,11 @@ typedef struct _list_node_t {
 
 typedef struct _list_t {
   list_node_t *nodes;
+  size_t count;
 } list_t;
 
 void
-list_insert (list_t *list, off_t position, void *val)
+list_ins (list_t *list, off_t position, void *val)
 {
   list_node_t **prev = &list->nodes;
   for (
@@ -185,10 +191,11 @@ list_insert (list_t *list, off_t position, void *val)
   node->val = val;
   node->next = *prev;
   *prev = node;
+  list->count++;
 }
 
 void*
-list_remove (list_t *list, off_t position)
+list_del (list_t *list, off_t position)
 {
   void *val = NULL;
   list_node_t **prev = &list->nodes;
@@ -203,6 +210,7 @@ list_remove (list_t *list, off_t position)
     val = node->val;
     *prev = node->next;
     release(node, sizeof(list_node_t));
+    list->count--;
   }
   return val;
 }
@@ -216,7 +224,7 @@ list_get (list_t *list, off_t position)
     *prev && i < position;
     prev = &((*prev)->next), i++
   );
-  return *prev;
+  return *prev ? (*prev)->val: NULL;
 }
 
 list_node_t*
@@ -241,6 +249,7 @@ void
 list_init (list_t *list)
 {
   list->nodes = NULL;
+  list->count = 0;
 }
 
 list_t*
@@ -263,6 +272,12 @@ list_free (list_t *list)
   release(list, sizeof(list_t));
 }
 
+size_t
+list_count (list_t *list)
+{
+  return list->count;
+}
+
 #define list_each(l) for ( \
   struct { int index; list_t *list; list_node_t *node; void *value; } \
     loop = { 0, (l), (l)->nodes, (l)->nodes ? (l)->nodes->val: NULL }; \
@@ -283,6 +298,7 @@ typedef struct _dict_t {
   dict_node_t *chains[PRIME_1000];
   dict_cb_cmp compare;
   dict_cb_hash hash;
+  size_t count;
 } dict_t;
 
 uint32_t
@@ -303,11 +319,13 @@ dict_init (dict_t *dict, dict_cb_hash hash, dict_cb_cmp compare)
   memset(dict, 0, sizeof(dict_t));
   dict->hash = hash ? hash: dict_str_hash;
   dict->compare = compare ? compare: dict_str_compare;
+  dict->count = 0;
 }
 
 int
 dict_set (dict_t *dict, void *key, void *val)
 {
+  int rc = 1;
   int chain = dict->hash(key) % PRIME_1000;
 
   dict_node_t *node = dict->chains[chain];
@@ -317,14 +335,14 @@ dict_set (dict_t *dict, void *key, void *val)
   if (!node)
   {
     node = allocate(sizeof(dict_node_t));
-    node->key = key;
-    node->val = val;
     node->next = dict->chains[chain];
     dict->chains[chain] = node;
-    return 2;
+    dict->count++;
+    rc = 2;
   }
+  node->key = key;
   node->val = val;
-  return 1;
+  return rc;
 }
 
 dict_node_t*
@@ -333,7 +351,7 @@ dict_find (dict_t *dict, void *key)
   int chain = dict->hash(key) % PRIME_1000;
 
   dict_node_t *node = dict->chains[chain];
-  while (node && !dict->compare(node->key, key))
+  while (node && dict->compare(node->key, key))
     node = node->next;
 
   return node;
@@ -368,6 +386,7 @@ dict_del (dict_t *dict, void *key)
     *prev = node->next;
     void *val = node->val;
     release(node, sizeof(dict_node_t));
+    dict->count--;
     return val;
   }
   return NULL;
@@ -420,6 +439,12 @@ dict_free (dict_t *dict)
     }
   }
   free(dict);
+}
+
+size_t
+dict_count(dict_t *dict)
+{
+  return dict->count;
 }
 
 #define dict_each(l) for ( \
