@@ -442,6 +442,7 @@ dict_empty (dict_t *dict)
       release(node, sizeof(dict_node_t));
     }
   }
+  dict->count = 0;
 }
 
 void
