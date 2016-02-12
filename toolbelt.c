@@ -332,7 +332,7 @@ dict_set (dict_t *dict, void *key, void *val)
   int chain = hv % PRIME_1000;
 
   dict_node_t *node = dict->chains[chain];
-  while (node && !dict->compare(node->key, key))
+  while (node && dict->compare(node->key, key))
     node = node->next;
 
   if (!node)
@@ -381,7 +381,7 @@ dict_del (dict_t *dict, void *key)
   int chain = dict->hash(key) % PRIME_1000;
 
   dict_node_t **prev = &dict->chains[chain];
-  while (*prev && !dict->compare((*prev)->key, key))
+  while (*prev && dict->compare((*prev)->key, key))
     prev = &((*prev)->next);
 
   if (*prev)
