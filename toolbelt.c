@@ -28,6 +28,12 @@
 #define errorf(...) do { fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); } while(0)
 #define unless(c) if (!(c))
 
+#define lambda(return_type, function_body) \
+({ \
+      return_type __fn__ function_body \
+          __fn__; \
+})
+
 typedef int (*callback)(void*);
 
 void*
@@ -45,13 +51,13 @@ release (void *ptr, size_t bytes)
 }
 
 int
-regmatch (regex_t *re, const char *subject)
+regmatch (regex_t *re, char *subject)
 {
   return regexec(re, subject, 0, NULL, 0) == 0;
 }
 
 uint32_t
-djb_hash (const char *str)
+djb_hash (char *str)
 {
   uint32_t hash = 5381;
   for (int i = 0; str[i]; hash = hash * 33 + str[i++]);
@@ -59,7 +65,7 @@ djb_hash (const char *str)
 }
 
 char*
-mprintf (const char *pattern, ...)
+mprintf (char *pattern, ...)
 {
   char *result = NULL;
   va_list args;
@@ -81,17 +87,17 @@ mprintf (const char *pattern, ...)
 typedef int (*str_cb_ischar)(int);
 
 int
-str_skip (const char *s, str_cb_ischar cb)
+str_skip (char *s, str_cb_ischar cb)
 {
-  const char *p = s;
+  char *p = s;
   while (s && *s && cb(*s)) s++;
   return s - p;
 }
 
 int
-str_scan (const char *s, str_cb_ischar cb)
+str_scan (char *s, str_cb_ischar cb)
 {
-  const char *p = s;
+  char *p = s;
   while (s && *s && !cb(*s)) s++;
   return s - p;
 }
@@ -100,6 +106,18 @@ int
 istab (int c)
 {
   return c == '\t';
+}
+
+int
+isforwardslash (int c)
+{
+  return c == '/';
+}
+
+int
+isbackslash (int c)
+{
+  return c == '\\';
 }
 
 int
@@ -122,7 +140,7 @@ str_is_tsv (char *line, int cols)
 #define STR_ENCODE_SQL 2
 
 char*
-str_encode (const char *s, int format)
+str_encode (char *s, int format)
 {
   char *result = NULL;
   int length = strlen(s);
@@ -151,7 +169,7 @@ str_encode (const char *s, int format)
 }
 
 char*
-str_decode (const char *s, int format)
+str_decode (char *s, int format)
 {
   char *result = NULL;
   if (format == STR_ENCODE_HEX)
@@ -277,6 +295,40 @@ size_t
 list_count (list_t *list)
 {
   return list->count;
+}
+
+void
+list_push (list_t *list, void *val)
+{
+  list_ins(list, list_count(list), val);
+}
+
+void
+list_shove (list_t *list, void *val)
+{
+  list_ins(list, 0, val);
+}
+
+list_t*
+list_scan_skip (char *s, str_cb_ischar cb)
+{
+  list_t *list = list_create();
+  while (s && *s)
+  {
+    char *start = s;
+    char *stop  = start + str_scan(start, cb);
+    int length  = stop - start;
+
+    if (length)
+    {
+      char *substr = allocate(length + 1);
+      memmove(substr, start, length);
+      substr[length] = 0;
+      list_push(list, substr);
+    }
+    s = stop + str_skip(stop, cb);
+  }
+  return list;
 }
 
 #define list_each(l) for ( \
@@ -453,7 +505,7 @@ dict_free (dict_t *dict)
 }
 
 size_t
-dict_count(dict_t *dict)
+dict_count (dict_t *dict)
 {
   return dict->count;
 }
@@ -464,3 +516,4 @@ dict_count(dict_t *dict)
     loop.node; \
     loop.index++, loop.node = dict_next(loop.dict, loop.node), loop.key = loop.node ? loop.node->key: NULL, loop.value = loop.node ? loop.node->val: NULL \
   )
+
