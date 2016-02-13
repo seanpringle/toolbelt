@@ -40,7 +40,7 @@ void*
 allocate (size_t bytes)
 {
   void *ptr = malloc(bytes);
-  ensure(ptr) errorf("malloc %lu", bytes);
+  ensure(ptr) errorf("malloc failed %lu bytes", bytes);
   return ptr;
 }
 
@@ -211,6 +211,25 @@ list_ins (list_t *list, off_t position, void *val)
   node->next = *prev;
   *prev = node;
   list->count++;
+}
+
+int
+list_set (list_t *list, off_t position, void *val)
+{
+  int rc = 1;
+  list_node_t *node = list->nodes;
+  for (
+    off_t i = 0;
+    node && i < position;
+    node = node->next, i++
+  );
+  if (!node)
+  {
+    list_ins(list, position, val);
+    rc = 2;
+  }
+  node->val = val;
+  return rc;
 }
 
 void*

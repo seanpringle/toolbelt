@@ -53,6 +53,9 @@ main (int argc, char *argv[])
   ensure((item = list_del(list, 1)) && !strcmp(item, "world"))
     errorf("list_del");
 
+  ensure(list_set(list, 0, "goodbye") == 1)
+    errorf("list_set 1");
+
   list_free(list);
 
   dict_t *dict = dict_create(NULL, NULL);
