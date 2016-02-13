@@ -88,5 +88,8 @@ main (int argc, char *argv[])
 
   dict_free(dict);
 
+  ensure(str_scan("hello", lambda(int, (int c) { return c == 'o'; })) == 4)
+    errorf("lambda");
+
   return EXIT_SUCCESS;
 }

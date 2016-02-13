@@ -102,6 +102,20 @@ str_scan (char *s, str_cb_ischar cb)
   return s - p;
 }
 
+char*
+str_trim (char *str, str_cb_ischar cb)
+{
+  char *left = str + str_skip(str, cb);
+  size_t len = strlen(left);
+  memmove(str, left, len+1);
+  for (
+    char *p = left + len - 1;
+    p >= str && *p && cb(*p);
+    *p = 0, p--
+  );
+  return str;
+}
+
 int
 istab (int c)
 {
