@@ -885,7 +885,6 @@ class Query
 
     // mysql result resource after each query
     protected $rs = null;
-    protected $rs_fields = array();
     protected $rs_sql = null;
 
     protected $error = null;
@@ -912,13 +911,8 @@ class Query
     {
         $env = dict(is_array($con) ? $con: $_ENV);
 
-        self::$db = mysqli_connect(
-            $env->get('mysqli_host', 'localhost'),
-            $env->get('mysqli_user', 'test'),
-            $env->get('mysqli_pass', ''),
-            $env->get('mysqli_name', 'test'),
-            $env->get('mysqli_port', 3306),
-            $env->get('mysqli_sock', null)
+        self::$db = pg_connect(
+            $env->get('pg_connect', 'host=localhost')
         );
     }
 
@@ -1112,14 +1106,14 @@ class Query
 
     private static function quote_string($str)
     {
-        if (preg_match('/^[a-zA-Z0-9@!#$%()+=*&^_\-. ]*$/', $str))
+        if (preg_match('/^[a-zA-Z0-9@_\-. ]*$/', $str))
             return "'$str'";
 
-        $res = "cast(X'";
+        $res = "convert_from(decode('";
         if (strlen($str))
             foreach (str_split($str) as $c)
                 $res .= sprintf('%02x', ord($c));
-        return $res."' as char)";
+        return $res."', 'hex'), 'UTF-8')";
     }
 
     // quote and escape a value
@@ -1283,7 +1277,7 @@ class Query
     public function where_gte($field, $value) { return $this->where_cmp($field, '>=', $value); }
 
     public function where_like($field, $value) { return $this->where_cmp($field, 'like', $value); }
-    public function where_regex($field, $value) { return $this->where_cmp($field, 'regexp', $value); }
+    public function where_regex($field, $value) { return $this->where_cmp($field, '~', $value); }
 
     public function where_not($field)
     {
@@ -1371,26 +1365,18 @@ class Query
 
         self::log($sql);
 
-        $this->rs = mysqli_query(self::$db, $sql, MYSQLI_STORE_RESULT);
+        $this->rs = pg_query(self::$db, $sql);
         $this->rs_sql = $sql;
-        $this->rs_fields = array();
 
         if ($this->rs === false)
         {
-            $this->error = mysqli_errno(self::$db);
-            $this->error_msg = mysqli_error(self::$db);
+            $this->error = 1;
+            $this->error_msg = pg_last_error(self::$db);
         }
-        else
-        if (is_object($this->rs))
-        {
-            while (($field = $this->rs->fetch_field()) && $field)
-                $this->rs_fields[] = $field;
-        }
-
-        if ($this->sql_calc_found)
-        {
-            $this->found_rows = query()->read('select found_rows()')->fetch_value();
-        }
+//        if ($this->sql_calc_found)
+//        {
+//            $this->found_rows = query()->read('select found_rows()')->fetch_value();
+//        }
         return $this;
     }
 
@@ -1407,19 +1393,19 @@ class Query
 
         self::log($sql);
 
-        $this->rs = mysqli_query(self::$db, $sql, MYSQLI_STORE_RESULT);
+        $this->rs = pg_query(self::$db, $sql);
         $this->rs_sql = $sql;
-        $this->rs_fields = array();
 
         if ($this->rs === false)
         {
-            $this->error = mysqli_errno(self::$db);
-            $this->error_msg = mysqli_error(self::$db);
+            $this->error = 1;
+            $this->error_msg = pg_last_error(self::$db);
         }
         else
-        if ($this->type == self::INSERT)
         {
-            $this->insert_id = mysqli_insert_id(self::$db);
+            $rs = pg_query(self::$db, "select lastval()");
+            $row = pg_fetch_array($rs);
+            $this->insert_id = $row[0];
         }
         return $this;
     }
@@ -1444,42 +1430,33 @@ class Query
             $this->select()->read()->ok();
 
         $rows = array();
-        while ($this->rs && ($row = mysqli_fetch_array($this->rs, MYSQLI_NUM)) && $row)
+        while ($this->rs && ($row = pg_fetch_array($this->rs, count($rows), PGSQL_NUM)) && $row)
         {
             $j = count($rows);
             $res = array();
             $pri = array();
             foreach ($row as $i => $value)
             {
-                $field = $this->rs_fields[$i];
-                $res[$field->name] = $value;
+                $type  = pg_field_type($this->rs, $i);
+                $field = pg_field_name($this->rs, $i);
 
-                // NOT_NULL_FLAG = 1
-                // PRI_KEY_FLAG = 2
-                // UNIQUE_KEY_FLAG = 4
-                // BLOB_FLAG = 16
-                // UNSIGNED_FLAG = 32
-                // ZEROFILL_FLAG = 64
-                // BINARY_FLAG = 128
-                // ENUM_FLAG = 256
-                // AUTO_INCREMENT_FLAG = 512
-                // TIMESTAMP_FLAG = 1024
-                // SET_FLAG = 2048
-                // NUM_FLAG = 32768
-                // PART_KEY_FLAG = 16384
-                // GROUP_FLAG = 32768
-                // UNIQUE_FLAG = 65536
+                $res[$field] = $value;
 
-                if (!is_null($value))
+                if (pg_field_is_null($this->rs, $j, $i))
                 {
-                    if ($field->flags & 32768)
-                        $res[$field->name] = preg_match('/^[0-9]+$/', $value) ? intval($value): floatval($value);
+                    $res[$field] = NULL;
                 }
-
-                if ($field->flags & 2)
-                    $pri[] = $value;
+                else
+                if (preg_match('/^(int|bigint|smallint)/', $type))
+                {
+                    $res[$field] = intval($value);
+                }
+                else
+                if (preg_match('/^(float|double)/', $type))
+                {
+                    $res[$field] = floatval($value);
+                }
             }
-            if ($pri) $j = join(':', $pri);
             $rows[$index ? $res[$index]: $j] = $res;
         }
 
