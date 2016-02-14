@@ -1157,7 +1157,7 @@ class Query
         if (is_scalar($field) && !preg_match('/^[a-zA-Z0-9_]+$/', $field))
             return $field;
 
-        return "`$field`";
+        return "\"$field\"";
     }
 
     public function field($field, $alias=null)
