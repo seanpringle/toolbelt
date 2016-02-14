@@ -88,8 +88,14 @@ main (int argc, char *argv[])
 
   dict_free(dict);
 
-  ensure(str_scan("hello", lambda(int, (int c) { return c == 'o'; })) == 4)
-    errorf("lambda");
+  ensure(str_skip("hello", isspace) == 0)
+    errorf("str_skip");
+
+  ensure(str_scan("hello", isspace) == 5)
+    errorf("str_skip");
+
+  ensure(str_count("hello", isspace) == 0)
+    errorf("str_count");
 
   return EXIT_SUCCESS;
 }

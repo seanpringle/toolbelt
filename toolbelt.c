@@ -28,11 +28,8 @@
 #define errorf(...) do { fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); } while(0)
 #define unless(c) if (!(c))
 
-#define lambda(return_type, function_body) \
-({ \
-      return_type __fn__ function_body \
-          __fn__; \
-})
+#define min(a,b) ({ __typeof__(a) _a = (a); __typeof__(b) _b = (b); _a < _b ? _a: _b; })
+#define max(a,b) ({ __typeof__(a) _a = (a); __typeof__(b) _b = (b); _a > _b ? _a: _b; })
 
 typedef int (*callback)(void*);
 
@@ -84,22 +81,35 @@ mprintf (char *pattern, ...)
   return result;
 }
 
+#define str_each(s) for (struct { int index; char *cursor; char value; } loop = { 0, (s), 0 }; \
+  (loop.value = loop.cursor[0]); loop.cursor++, loop.value = loop.cursor[0])
+
 typedef int (*str_cb_ischar)(int);
 
 int
 str_skip (char *s, str_cb_ischar cb)
 {
-  char *p = s;
-  while (s && *s && cb(*s)) s++;
-  return s - p;
+  int count = 0;
+  str_each(s)
+  {
+    if (!cb(loop.value))
+      break;
+    count++;
+  }
+  return count;
 }
 
 int
 str_scan (char *s, str_cb_ischar cb)
 {
-  char *p = s;
-  while (s && *s && !cb(*s)) s++;
-  return s - p;
+  int count = 0;
+  str_each(s)
+  {
+    if (cb(loop.value))
+      break;
+    count++;
+  }
+  return count;
 }
 
 char*
@@ -138,8 +148,8 @@ int
 str_count (char *str, str_cb_ischar cb)
 {
   int count = 0;
-  while (str && *str)
-    if (cb(*str++)) count++;
+  str_each(str)
+    if (cb(loop.value)) count++;
   return count;
 }
 
