@@ -1213,7 +1213,7 @@ class Query
         if (preg_match('/^on_(.+)$/', $name, $matches))
         {
             $query = $this->joins[count($this->joins)-1][0];
-            call_user_func_array([ $query, "where_${matches[1]}"], $arguments);
+            call_user_func_array(array( $query, "where_${matches[1]}"), $arguments);
             return $this;
         }
         throw new Exception("unknown method Query::$name", 1);
