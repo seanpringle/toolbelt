@@ -1306,7 +1306,7 @@ class Query
     public function where_in($field, $value, $mode=true)
     {
         if (is_scalar($value))
-            $value = [ $value ];
+            $value = array( $value );
 
         $op = $mode ? 'in': 'not in';
         $this->where[] = $this->quote_field($field).' '.$op.' '.self::quote_value($value);
