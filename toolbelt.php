@@ -1473,16 +1473,16 @@ class Query
 
     public function fetch_field($name)
     {
-        $values = dict();
+        $values = array();
         foreach ($this->fetch_all() as $row)
-            $values[] = $row && $name ? $row->$name: ($row ? array_shift($row->values()): null);
-        return $values;
+            $values[] = $row->count() && $name ? $row->$name: ($row->count() ? array_shift($row->values()): null);
+        return dict($values);
     }
 
     public function fetch_value($name=null)
     {
         $row = $this->fetch_one();
-        return $row && $name ? $row->$name: ($row ? array_shift($row->values()): null);
+        return $row->count() && $name ? $row->$name: ($row->count() ? array_shift($row->values()): null);
     }
 
     public function insert_id()
