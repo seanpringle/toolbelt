@@ -851,7 +851,8 @@ function query($table='_', $alias=null)
     $bt = debug_backtrace();
     $comment = sprintf("%s:%d", basename($bt[0]['file']), $bt[0]['line']);
 
-    return (new Query($table, $alias ? $alias: substr($table, 0, 1)))->comment($comment);
+    $query = new Query($table, $alias ? $alias: substr($table, 0, 1));
+    return $query->comment($comment);
 }
 
 function is_query($obj)
@@ -863,13 +864,13 @@ class Query
 {
     protected $table;
     protected $alias;
-    protected $fields = [];
-    protected $where  = [];
-    protected $group  = [];
-    protected $order  = [];
-    protected $limit  = [];
-    protected $pairs  = [];
-    protected $joins  = [];
+    protected $fields = array();
+    protected $where  = array();
+    protected $group  = array();
+    protected $order  = array();
+    protected $limit  = array();
+    protected $pairs  = array();
+    protected $joins  = array();
 
     protected $type;
 
@@ -880,7 +881,7 @@ class Query
     const REPLACE = 5;
 
     protected static $db = null;
-    protected static $log = [];
+    protected static $log = array();
 
     // mysql result resource after each query
     protected $rs = null;
@@ -1039,7 +1040,7 @@ class Query
 
     public function sql_fields()
     {
-        $sql = [];
+        $sql = array();
         foreach ($this->fields as $alias => $field)
             $sql[] = $field == $alias ? "$field" : "$field as $alias";
         return $sql ? join(', ', $sql): "{$this->alias}.*";
@@ -1047,7 +1048,7 @@ class Query
 
     public function sql_pairs()
     {
-        $sql = [];
+        $sql = array();
         foreach ($this->pairs as $field => $value)
             $sql[] = "$field = $value";
         return join(', ', $sql);
@@ -1055,7 +1056,7 @@ class Query
 
     public function sql_where()
     {
-        $sql = [];
+        $sql = array();
         foreach ($this->where as $clause)
             $sql[] = is_array($clause) ? '('.join(' or ', $clause).')': "$clause";
         return $sql ? 'where '.join(' and ', $sql): '';
@@ -1063,7 +1064,7 @@ class Query
 
     public function sql_on()
     {
-        $sql = [];
+        $sql = array();
         foreach ($this->where as $clause)
             $sql[] = is_array($clause) ? '('.join(' or ', $clause).')': "$clause";
         return $sql ? 'on '.join(' and ', $sql): '';
@@ -1071,7 +1072,7 @@ class Query
 
     public function sql_group()
     {
-        $sql = [];
+        $sql = array();
         foreach ($this->group as $field)
             $sql[] = $this->quote_field($field);
         return $sql ? 'group by '.join(', ', $sql): '';
@@ -1079,7 +1080,7 @@ class Query
 
     public function sql_order()
     {
-        $sql = [];
+        $sql = array();
         foreach ($this->order as $field => $dir)
             $sql[] = $this->quote_field($field)." $dir";
         return  $sql ? 'order by '.join(', ', $sql): ($this->group ? 'order by null': '');
@@ -1092,7 +1093,7 @@ class Query
 
     public function sql_joins()
     {
-        $sql = [];
+        $sql = array();
         foreach ($this->joins as $join)
         {
             list ($query, $type) = $join;
@@ -1349,7 +1350,7 @@ class Query
 
     public function join($table, $alias=null, $type='inner')
     {
-        $this->joins[] = [ new Query($table, $alias), $type ];
+        $this->joins[] = array( new Query($table, $alias), $type );
         return $this;
     }
 
@@ -1497,14 +1498,14 @@ class Query
     {
         $values = dict();
         foreach ($this->fetch_all() as $row)
-            $values[] = $row && $name ? $row->$name: ($row ? $row->values()[0]: null);
+            $values[] = $row && $name ? $row->$name: ($row ? array_shift($row->values()): null);
         return $values;
     }
 
     public function fetch_value($name=null)
     {
         $row = $this->fetch_one();
-        return $row && $name ? $row->$name: ($row ? $row->values()[0]: null);
+        return $row && $name ? $row->$name: ($row ? array_shift($row->values()): null);
     }
 
     public function insert_id()
