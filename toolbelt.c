@@ -934,36 +934,52 @@ json_free (json_t *json)
   free(json);
 }
 
-json_t*
-json_object_get (json_t *json, char *name)
+uint32_t
+json_dict_hash (void *a)
+{
+  char *str = str_decode((char*)a, NULL, STR_ENCODE_DQUOTE);
+  uint32_t hash = djb_hash(str);
+  free(str);
+  return hash;
+}
+
+int
+json_dict_compare (void *a, void *b)
+{
+  char *str = str_decode((char*)a, NULL, STR_ENCODE_DQUOTE);
+  int cmp = strcmp(str, (char*)b);
+  free(str);
+  return cmp;
+}
+
+dict_t*
+json_dict (json_t *json)
 {
   if (json->type != JSON_OBJECT)
     return NULL;
 
+  dict_t *dict = dict_create(json_dict_hash, json_dict_compare);
+
   for (json_t *key = json->children; key; key = key->sibling)
   {
     if (key->type == JSON_STRING && key->sibling)
-    {
-      char *str = str_decode(key->start, NULL, STR_ENCODE_DQUOTE);
-      int found = !strcmp(str, name);
-      free(str);
+      dict_set(dict, key->start, key->sibling);
 
-      if (found) return key->sibling;
-    }
     key = key->sibling;
   }
-  return NULL;
+  return dict;
 }
 
-json_t*
-json_array_get (json_t *json, uint32_t index)
+dict_t*
+json_list (json_t *json)
 {
   if (json->type != JSON_ARRAY)
     return NULL;
 
-  int i = 0;
-  json_t *item = json->children;
-  for (; i < index && item; item = item->sibling, i++);
+  list_t *list = list_create();
 
-  return item;
+  for (json_t *item = json->children; item; item = item->sibling)
+    list_push(item);
+
+  return list;
 }
