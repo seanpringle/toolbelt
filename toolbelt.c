@@ -18,6 +18,7 @@
 #include <time.h>
 #include <pthread.h>
 #include <libgen.h>
+#include <math.h>
 
 #define PRIME_1000 997
 #define PRIME_10000 9973
@@ -59,6 +60,26 @@ djb_hash (char *str)
   uint32_t hash = 5381;
   for (int i = 0; str[i]; hash = hash * 33 + str[i++]);
   return hash;
+}
+
+char*
+mfgets (FILE *file)
+{
+  size_t bytes = 100;
+  char *line = allocate(bytes);
+  line[0] = 0;
+
+  while (fgets(line + bytes - 100, 100, file) && !strchr(line + bytes - 100, '\n'))
+  {
+    bytes += 100;
+    line = realloc(line, bytes);
+  }
+  if (ferror(file) || (!line[0] && feof(file)))
+  {
+    free(line);
+    line = NULL;
+  }
+  return line;
 }
 
 char*
@@ -133,6 +154,18 @@ istab (int c)
 }
 
 int
+iscomma (int c)
+{
+  return c == ',';
+}
+
+int
+isperiod (int c)
+{
+  return c == '.';
+}
+
+int
 isforwardslash (int c)
 {
   return c == '/';
@@ -145,11 +178,39 @@ isbackslash (int c)
 }
 
 int
+isdquote (int c)
+{
+  return c == '"';
+}
+
+int
+issquote (int c)
+{
+  return c == '\'';
+}
+
+int
 str_count (char *str, str_cb_ischar cb)
 {
   int count = 0;
   str_each(str)
     if (cb(loop.value)) count++;
+  return count;
+}
+
+int
+str_strip (char *s, str_cb_ischar cb)
+{
+  int count = 0;
+  while (s && *s)
+  {
+    if (cb(*s))
+    {
+      memmove(s, s+1, strlen(s+1)+1);
+      count++;
+    }
+    s++;
+  }
   return count;
 }
 
@@ -174,14 +235,14 @@ str_encode (char *s, int format)
     int bytes = length * 2 + 1;
     result = allocate(bytes);
     for (int i = 0; s[i]; i++)
-      sprintf(&result[i*2], "%02x", s[i]);
+      sprintf(&result[i*2], "%02x", (unsigned char)s[i]);
     result[bytes-1] = 0;
   }
   else
   if (format == STR_ENCODE_SQL)
   {
     char *hex = str_encode(s, STR_ENCODE_HEX);
-    result = mprintf("convert_from(decode('%s', 'hex'), 'UTF-8')", hex);
+    result = mprintf("convert_from(decode('%s', 'hex'), 'UTF8')", hex);
     free(hex);
   }
   else
@@ -323,7 +384,7 @@ list_create ()
 }
 
 void
-list_free (list_t *list)
+list_empty (list_t *list)
 {
   while (list->nodes)
   {
@@ -331,6 +392,13 @@ list_free (list_t *list)
     list->nodes = node->next;
     release(node, sizeof(list_node_t));
   }
+  list->count = 0;
+}
+
+void
+list_free (list_t *list)
+{
+  list_empty(list);
   release(list, sizeof(list_t));
 }
 
