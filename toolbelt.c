@@ -970,7 +970,7 @@ json_dict (json_t *json)
   return dict;
 }
 
-dict_t*
+list_t*
 json_list (json_t *json)
 {
   if (json->type != JSON_ARRAY)
@@ -979,7 +979,7 @@ json_list (json_t *json)
   list_t *list = list_create();
 
   for (json_t *item = json->children; item; item = item->sibling)
-    list_push(item);
+    list_push(list, item);
 
   return list;
 }
