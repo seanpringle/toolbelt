@@ -384,12 +384,13 @@ list_create ()
 }
 
 void
-list_empty (list_t *list)
+list_empty (list_t *list, callback cb)
 {
   while (list->nodes)
   {
     list_node_t *node = list->nodes;
     list->nodes = node->next;
+    if (cb) cb(node->val);
     release(node, sizeof(list_node_t));
   }
   list->count = 0;
@@ -398,7 +399,7 @@ list_empty (list_t *list)
 void
 list_free (list_t *list)
 {
-  list_empty(list);
+  list_empty(list, NULL);
   release(list, sizeof(list_t));
 }
 
@@ -594,7 +595,7 @@ dict_create (dict_cb_hash hash, dict_cb_cmp compare)
 }
 
 void
-dict_empty (dict_t *dict)
+dict_empty (dict_t *dict, callback cbk, callback cbv)
 {
   for (int i = 0; i < PRIME_1000; i++)
   {
@@ -602,6 +603,8 @@ dict_empty (dict_t *dict)
     {
       dict_node_t *node = dict->chains[i];
       dict->chains[i] = node->next;
+      if (cbk) cbk(node->key);
+      if (cbv) cbv(node->val);
       release(node, sizeof(dict_node_t));
     }
   }
@@ -611,7 +614,7 @@ dict_empty (dict_t *dict)
 void
 dict_free (dict_t *dict)
 {
-  dict_empty(dict);
+  dict_empty(dict, NULL, NULL);
   free(dict);
 }
 
