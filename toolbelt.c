@@ -103,7 +103,7 @@ mprintf (char *pattern, ...)
 }
 
 #define str_each(s) for (struct { int index; char *cursor; char value; } loop = { 0, (s), 0 }; \
-  (loop.value = loop.cursor[0]); loop.cursor++, loop.value = loop.cursor[0])
+  (loop.value = loop.cursor[0]); loop.cursor++)
 
 typedef int (*str_cb_ischar)(int);
 
@@ -223,6 +223,7 @@ str_is_tsv (char *line, int cols)
 
 #define STR_ENCODE_HEX 1
 #define STR_ENCODE_SQL 2
+#define STR_ENCODE_DQUOTE 3
 
 char*
 str_encode (char *s, int format)
@@ -246,6 +247,34 @@ str_encode (char *s, int format)
     free(hex);
   }
   else
+  if (format == STR_ENCODE_DQUOTE)
+  {
+    result = mprintf("\"");
+    char *change = NULL;
+
+    str_each(s)
+    {
+      int c = loop.value;
+
+           if (c == 0x07) change = mprintf("%s\\a", result);
+      else if (c == 0x08) change = mprintf("%s\\b", result);
+      else if (c == 0x0c) change = mprintf("%s\\f", result);
+      else if (c == 0x0a) change = mprintf("%s\\n", result);
+      else if (c == 0x0d) change = mprintf("%s\\r", result);
+      else if (c == 0x09) change = mprintf("%s\\t", result);
+      else if (c == 0x0B) change = mprintf("%s\\v", result);
+      else if (c == '\\') change = mprintf("%s\\\\", result);
+      else if (c ==  '"') change = mprintf("%s\\\"", result);
+      else                change = mprintf("%s%c", result, c);
+
+      free(result);
+      result = change;
+    }
+    change = mprintf("%s\"", result);
+    free(result);
+    result = change;
+  }
+  else
   {
     ensure(0)
       errorf("str_encode() unknown format: %d", format);
@@ -254,7 +283,7 @@ str_encode (char *s, int format)
 }
 
 char*
-str_decode (char *s, int format)
+str_decode (char *s, char **e, int format)
 {
   char *result = NULL;
   if (format == STR_ENCODE_HEX)
@@ -268,7 +297,56 @@ str_decode (char *s, int format)
       result[i/2] = strtol(buf, NULL, 16);
     }
     result[bytes-1] = 0;
+
+    if (e)
+      *e = s+bytes;
   }
+  else
+  if (format == STR_ENCODE_DQUOTE)
+  {
+    if (e)
+      *e = s;
+
+    if (*s++ != '"')
+      goto done;
+
+    result = mprintf("");
+    char *change = NULL;
+
+    str_each(s)
+    {
+      int c = loop.value;
+
+      if (e)
+        *e = loop.cursor;
+
+      if (c == '"')
+      {
+        if (e)
+          *e = loop.cursor+1;
+        break;
+      }
+
+      if (c == '\\')
+      {
+        loop.cursor++;
+        c = loop.cursor[0];
+
+             if (c == 'a')  c = '\a';
+        else if (c == 'b')  c = '\b';
+        else if (c == 'f')  c = '\f';
+        else if (c == 'n')  c = '\n';
+        else if (c == 'r')  c = '\r';
+        else if (c == 't')  c = '\t';
+        else if (c == 'v')  c = '\v';
+      }
+
+      change = mprintf("%s%c", result, c);
+      free(result);
+      result = change;
+    }
+  }
+done:
   return result;
 }
 
@@ -631,3 +709,261 @@ dict_count (dict_t *dict)
     loop.index++, loop.node = dict_next(loop.dict, loop.node), loop.key = loop.node ? loop.node->key: NULL, loop.value = loop.node ? loop.node->val: NULL \
   )
 
+#define JSON_OBJECT 1
+#define JSON_ARRAY 2
+#define JSON_STRING 3
+#define JSON_NUMBER 4
+
+typedef struct _json_t {
+  int type;
+  char *start;
+  size_t length;
+  struct _json_t *sibling;
+  struct _json_t *children;
+} json_t;
+
+json_t* json_parse (char *subject);
+
+json_t*
+json_parse_number (char *subject)
+{
+
+  char *end = NULL;
+  strtod(subject, &end);
+
+  json_t *json = allocate(sizeof(json_t));
+  json->type   = JSON_NUMBER;
+  json->start  = subject;
+  json->length = end - subject;
+  json->sibling = NULL;
+  json->children = NULL;
+
+  return json;
+}
+
+json_t*
+json_parse_string (char *subject)
+{
+  char *end = NULL;
+
+  if (subject[0] != '"')
+    return NULL;
+
+  char *str = str_decode(subject, &end, STR_ENCODE_DQUOTE);
+  free(str);
+
+  json_t *json = allocate(sizeof(json_t));
+  json->type   = JSON_STRING;
+  json->start  = subject;
+  json->length = end - subject;
+  json->sibling = NULL;
+  json->children = NULL;
+
+  return json;
+}
+
+json_t*
+json_parse_array (char *subject)
+{
+
+  json_t *json = NULL;
+  char *start = subject;
+
+  if (*subject++ != '[')
+    goto done;
+
+  json = allocate(sizeof(json_t));
+  json->type   = JSON_ARRAY;
+  json->start  = start;
+  json->length = 0;
+  json->sibling = NULL;
+  json->children = NULL;
+
+  json_t *last = NULL;
+
+  while (subject && *subject)
+  {
+    subject += str_skip(subject, isspace);
+
+    int c = subject[0];
+
+    if (!c)
+      break;
+
+    if (c == ']')
+    {
+      subject++;
+      break;
+    }
+
+    if (c == ',')
+    {
+      subject++;
+      continue;
+    }
+
+    json_t *item = json_parse(subject);
+
+    if (!item || !item->length)
+      break;
+
+    subject = item->start + item->length;
+
+    if (last)
+    {
+      last->sibling = item;
+      last = item;
+    }
+    else
+    {
+      last = item;
+      json->children = item;
+    }
+  }
+
+  json->length = subject - start;
+
+done:
+  return json;
+}
+
+json_t*
+json_parse_object (char *subject)
+{
+
+  json_t *json = NULL;
+  char *start = subject;
+
+  if (*subject++ != '{')
+    goto done;
+
+  json = allocate(sizeof(json_t));
+  json->type   = JSON_OBJECT;
+  json->start  = start;
+  json->length = 0;
+  json->sibling = NULL;
+  json->children = NULL;
+
+  json_t *last = NULL;
+
+  while (subject && *subject)
+  {
+    subject += str_skip(subject, isspace);
+
+    int c = *subject;
+
+    if (!c)
+      break;
+
+    if (c == '}')
+    {
+      subject++;
+      break;
+    }
+
+    if (c == ',' || c == ':')
+    {
+      subject++;
+      continue;
+    }
+
+    json_t *item = json_parse(subject);
+
+    if (!item || !item->length)
+      break;
+
+    subject = item->start + item->length;
+
+    if (last)
+    {
+      last->sibling = item;
+      last = item;
+    }
+    else
+    {
+      last = item;
+      json->children = item;
+    }
+  }
+
+  json->length = subject - start;
+
+done:
+  return json;
+}
+
+json_t*
+json_parse (char *subject)
+{
+  subject += str_skip(subject, isspace);
+
+  int c = subject[0];
+  json_t *child = NULL;
+
+  if (c == '{')
+  {
+    child = json_parse_object(subject);
+  }
+  else if (c == '[')
+  {
+    child = json_parse_array(subject);
+  }
+  else if (c == '"')
+  {
+    child = json_parse_string(subject);
+  }
+  else
+  {
+    child = json_parse_number(subject);
+  }
+  return child;
+}
+
+void
+json_free (json_t *json)
+{
+  if (json)
+  {
+    while (json->children)
+    {
+      json_t *item = json->children;
+      json->children = item->sibling;
+      json_free(item);
+    }
+  }
+  free(json);
+}
+
+json_t*
+json_object_get (json_t *json, char *name)
+{
+  if (json->type != JSON_OBJECT)
+    return NULL;
+
+  for (json_t *key = json->children; key; key = key->sibling)
+  {
+    if (key->type == JSON_STRING && key->sibling)
+    {
+      char *str = str_decode(key->start, NULL, STR_ENCODE_DQUOTE);
+      int found = !strcmp(str, name);
+      free(str);
+
+      if (found) return key->sibling;
+    }
+    key = key->sibling;
+  }
+  return NULL;
+}
+
+json_t*
+json_array_get (json_t *json, uint32_t index)
+{
+  if (json->type != JSON_ARRAY)
+    return NULL;
+
+  int i = 0;
+  json_t *item = json->children;
+  for (; i < index && item; item = item->sibling, i++);
+
+  return item;
+}
