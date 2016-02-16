@@ -713,6 +713,7 @@ dict_empty_free_vals (dict_t *dict)
 #define JSON_NUMBER 4
 #define JSON_INTEGER 5
 #define JSON_DOUBLE 6
+#define JSON_BOOLEAN 7
 
 typedef struct _json_t {
   int type;
@@ -729,10 +730,25 @@ json_t* json_parse (char *subject);
 #define json_is_string(j) ((j) && (j)->type == JSON_STRING)
 #define json_is_array(j)  ((j) && (j)->type == JSON_ARRAY)
 #define json_is_object(j) ((j) && (j)->type == JSON_OBJECT)
+#define json_is_boolean(j) ((j) && (j)->type == JSON_BOOLEAN)
 
 #define json_double(j) strtod((j)->start, NULL)
 #define json_integer(j) strtoll((j)->start, NULL, 0)
 #define json_string(j) str_decode((j)->start, NULL, STR_ENCODE_DQUOTE)
+#define json_boolean(j) (strchr((j)->start[0], "tT") ? 1:0)
+
+json_t*
+json_parse_boolean (char *subject)
+{
+  json_t *json = allocate(sizeof(json_t));
+  json->type   = JSON_BOOLEAN;
+  json->start  = subject;
+  json->length = str_skip(subject, isalpha);
+  json->sibling = NULL;
+  json->children = NULL;
+
+  return json;
+}
 
 json_t*
 json_parse_number (char *subject)
@@ -928,6 +944,8 @@ json_parse (char *subject)
     child = json_parse_array(subject);
   else if (c == '"')
     child = json_parse_string(subject);
+  else if (strchr("tTfF", c))
+    child = json_parse_boolean(subject);
   else
     child = json_parse_number(subject);
   return child;
