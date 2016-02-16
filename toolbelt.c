@@ -478,8 +478,8 @@ list_scan_skip (char *s, str_cb_ischar cb)
   return list;
 }
 
-#define list_each(l) for ( \
-  struct { int index; list_t *list; list_node_t *node; void *value; } \
+#define list_each(l,_val_type) for ( \
+  struct { int index; list_t *list; list_node_t *node; _val_type value; } \
     loop = { 0, (l), (l)->nodes, (l)->nodes ? (l)->nodes->val: NULL }; \
     loop.node; \
     loop.index++, loop.node = list_next(loop.list, loop.node), loop.value = loop.node ? loop.node->val: NULL \
@@ -488,7 +488,7 @@ list_scan_skip (char *s, str_cb_ischar cb)
 void
 list_empty_free (list_t *list)
 {
-  list_each(list) free(loop.value);
+  list_each(list, void*) free(loop.value);
 }
 
 struct _dict_t;
@@ -667,8 +667,8 @@ dict_count (dict_t *dict)
   return dict->count;
 }
 
-#define dict_each(l) for ( \
-  struct { int index; dict_t *dict; dict_node_t *node; void *key; void *value; } \
+#define dict_each(l,_key_type,_val_type) for ( \
+  struct { int index; dict_t *dict; dict_node_t *node; _key_type key; _val_type value; } \
     loop = { 0, (l), dict_first((l)), dict_first((l)) ? dict_first((l))->key: NULL, dict_first((l)) ? dict_first((l))->val: NULL }; \
     loop.node; \
     loop.index++, loop.node = dict_next(loop.dict, loop.node), loop.key = loop.node ? loop.node->key: NULL, loop.value = loop.node ? loop.node->val: NULL \
@@ -677,19 +677,19 @@ dict_count (dict_t *dict)
 void
 dict_empty_free (dict_t *dict)
 {
-  dict_each(dict) { free(loop.key); free(loop.value); }
+  dict_each(dict, void*, void*) { free(loop.key); free(loop.value); }
 }
 
 void
 dict_empty_free_keys (dict_t *dict)
 {
-  dict_each(dict) free(loop.key);
+  dict_each(dict, void*, void*) free(loop.key);
 }
 
 void
 dict_empty_free_vals (dict_t *dict)
 {
-  dict_each(dict) free(loop.value);
+  dict_each(dict, void*, void*) free(loop.value);
 }
 
 #define JSON_OBJECT 1
