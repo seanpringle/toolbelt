@@ -968,25 +968,6 @@ json_object_get (json_t *json, char *name)
   return NULL;
 }
 
-dict_t*
-json_dict (json_t *json)
-{
-  if (!json || json->type != JSON_OBJECT)
-    return NULL;
-
-  dict_t *dict = dict_create();
-  dict->empty = dict_empty_free_keys;
-
-  for (json_t *key = json->children; key && key->sibling; key = key->sibling)
-  {
-    if (key->type == JSON_STRING && key->sibling)
-      dict_set(dict, json_string(key), key->sibling);
-
-    key = key->sibling;
-  }
-  return dict;
-}
-
 json_t*
 json_array_get (json_t *json, int index)
 {
@@ -1000,19 +981,4 @@ json_array_get (json_t *json, int index)
     i++;
   }
   return NULL;
-}
-
-
-list_t*
-json_list (json_t *json)
-{
-  if (!json || json->type != JSON_ARRAY)
-    return NULL;
-
-  list_t *list = list_create();
-
-  for (json_t *item = json->children; item; item = item->sibling)
-    list_push(list, item);
-
-  return list;
 }
