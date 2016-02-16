@@ -264,8 +264,8 @@ str_decode (char *s, char **e, int format)
     if (*s++ != '"')
       goto done;
 
-    result = mprintf("");
-    char *change = NULL;
+    size_t length = 0, limit = 32;
+    result = allocate(32);
 
     str_each(s)
     {
@@ -295,9 +295,14 @@ str_decode (char *s, char **e, int format)
         else if (c == 'v')  c = '\v';
       }
 
-      change = mprintf("%s%c", result, c);
-      free(result);
-      result = change;
+      if (length >= limit)
+      {
+        limit += 32;
+        result = realloc(result, limit+1);
+      }
+
+      result[length++] = c;
+      result[length] = 0;
     }
   }
 done:
