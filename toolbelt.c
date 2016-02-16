@@ -351,6 +351,9 @@ done:
   return result;
 }
 
+struct _list_t;
+typedef void (*list_callback)(struct _list_t*);
+
 typedef struct _list_node_t {
   void *val;
   struct _list_node_t *next;
@@ -359,7 +362,7 @@ typedef struct _list_node_t {
 typedef struct _list_t {
   list_node_t *nodes;
   size_t count;
-  vcallback empty;
+  list_callback empty;
 } list_t;
 
 void
@@ -530,8 +533,11 @@ list_scan_skip (char *s, str_cb_ischar cb)
     loop.index++, loop.node = list_next(loop.list, loop.node), loop.value = loop.node ? loop.node->val: NULL \
   )
 
-typedef int (*dict_cb_cmp)(void*, void*);
-typedef uint32_t (*dict_cb_hash)(void*);
+struct _dict_t;
+typedef void (*dict_callback)(struct _dict_t*);
+
+typedef int (*dict_callback_cmp)(void*, void*);
+typedef uint32_t (*dict_callback_hash)(void*);
 
 typedef struct _dict_node_t {
   void *key;
@@ -542,9 +548,9 @@ typedef struct _dict_node_t {
 
 typedef struct _dict_t {
   dict_node_t *chains[PRIME_1000];
-  dict_cb_hash hash;
-  dict_cb_cmp compare;
-  vcallback empty;
+  dict_callback_hash hash;
+  dict_callback_cmp compare;
+  dict_callback empty;
   size_t count;
 } dict_t;
 
@@ -952,9 +958,9 @@ json_free (json_t *json)
 }
 
 void
-json_dict_empty (void *p)
+json_dict_empty (dict_t *dict)
 {
-  dict_each((dict_t*)p) free(loop.key);
+  dict_each(dict) free(loop.key);
 }
 
 dict_t*
