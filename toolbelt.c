@@ -714,6 +714,8 @@ dict_count (dict_t *dict)
 #define JSON_ARRAY 2
 #define JSON_STRING 3
 #define JSON_NUMBER 4
+#define JSON_INTEGER 5
+#define JSON_DOUBLE 6
 
 typedef struct _json_t {
   int type;
@@ -725,28 +727,41 @@ typedef struct _json_t {
 
 json_t* json_parse (char *subject);
 
-#define json_is_number(j) ((j)->type == JSON_NUMBER)
+#define json_is_integer(j) ((j)->type == JSON_INTEGER)
+#define json_is_double(j) ((j)->type == JSON_DOUBLE)
 #define json_is_string(j) ((j)->type == JSON_STRING)
 #define json_is_array(j)  ((j)->type == JSON_ARRAY)
 #define json_is_object(j) ((j)->type == JSON_OBJECT)
 
 #define json_double(j) strtod((j)->start, NULL)
-#define json_number(j) strtoll((j)->start, NULL, 0)
+#define json_integer(j) strtoll((j)->start, NULL, 0)
 #define json_string(j) str_decode((j)->start, NULL, STR_ENCODE_DQUOTE)
 
 json_t*
 json_parse_number (char *subject)
 {
+  char *e1 = NULL;
+  char *e2 = NULL;
 
-  char *end = NULL;
-  strtod(subject, &end);
+  strtoll(subject, &e1, 0);
+  strtod(subject, &e2);
 
   json_t *json = allocate(sizeof(json_t));
   json->type   = JSON_NUMBER;
   json->start  = subject;
-  json->length = end - subject;
   json->sibling = NULL;
   json->children = NULL;
+
+  if (e1 >= e2)
+  {
+    json->length = e1 - subject;
+    json->type = JSON_INTEGER;
+  }
+  else
+  {
+    json->length = e2 - subject;
+    json->type = JSON_DOUBLE;
+  }
 
   return json;
 }
