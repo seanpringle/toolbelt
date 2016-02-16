@@ -1046,6 +1046,7 @@ typedef struct _pool_t {
   size_t extent_bytes;
   size_t size;
   FILE *data;
+  FILE *data_ro;
   size_t data_bytes;
   char *name;
 } pool_t;
@@ -1129,7 +1130,7 @@ pool_open (pool_t *pool, size_t size, size_t extent, char *name)
 }
 
 void*
-pool_read (pool_t *pool, off_t position, void *ptr)
+pool_read (pool_t *pool, off_t position, void *ptr, FILE *data)
 {
   byte_t *cached = pool_cached(pool, position);
 
@@ -1140,10 +1141,12 @@ pool_read (pool_t *pool, off_t position, void *ptr)
   }
   else
   {
-    ensure(fseeko(pool->data, position, SEEK_SET) == 0)
+    if (!data) data = pool->data;
+
+    ensure(fseeko(data, position, SEEK_SET) == 0)
       errorf("cannot seek pool: %s", pool->name);
 
-    ensure(fread(ptr, 1, pool->size, pool->data) == pool->size)
+    ensure(fread(ptr, 1, pool->size, data) == pool->size)
       errorf("cannot read pool: %s", pool->name);
     return ptr;
   }
