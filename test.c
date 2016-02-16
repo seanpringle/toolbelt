@@ -23,7 +23,7 @@ main (int argc, char *argv[])
   char *item;
 
   char *a = str_encode("hello world", STR_ENCODE_HEX);
-  char *b = str_decode("68656c6c6f20776f726c64", STR_ENCODE_HEX);
+  char *b = str_decode("68656c6c6f20776f726c64", NULL, STR_ENCODE_HEX);
 
   ensure(a && !strcmp(a, "68656c6c6f20776f726c64"))
     errorf("str_encode");
@@ -45,6 +45,9 @@ main (int argc, char *argv[])
   list_ins(list, 0, "world");
   list_ins(list, 0, "hello");
 
+  list_each(list, char*)
+    printf("%s\n", loop.value);
+
   ensure(list_count(list) == 2) errorf("list_length");
 
   ensure((item = list_get(list, 0)) && !strcmp(item, "hello"))
@@ -58,12 +61,15 @@ main (int argc, char *argv[])
 
   list_free(list);
 
-  dict_t *dict = dict_create(NULL, NULL);
+  dict_t *dict = dict_create();
   ensure(dict) errorf("dict_create");
 
   dict_set(dict, "hello", "world");
   dict_set(dict, "alpha", "beta");
   dict_set(dict, "fu", "bar");
+
+  dict_each(dict, char*, char*)
+    printf("%s => %s\n", loop.key, loop.value);
 
   ensure((item = dict_get(dict, "hello")) && !strcmp(item, "world"))
     errorf("dict_get 1");
@@ -96,6 +102,18 @@ main (int argc, char *argv[])
 
   ensure(str_count("hello", isspace) == 0)
     errorf("str_count");
+
+  char *dquote = str_decode("\"hello\\nworld\\n\"", NULL, STR_ENCODE_DQUOTE);
+  ensure(!strcmp(dquote, "hello\nworld\n"))
+    errorf("str_decode DQUOTE");
+  free(dquote);
+
+  json_t *json = json_parse("{\"alpha\": 1, \"beta\": 2, \"gamma\": [1, 2, 3] }");
+
+  ensure(json)
+    errorf("json_parse");
+
+  json_free(json);
 
   return EXIT_SUCCESS;
 }
