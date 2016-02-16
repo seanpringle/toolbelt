@@ -724,11 +724,11 @@ typedef struct _json_t {
 
 json_t* json_parse (char *subject);
 
-#define json_is_integer(j) ((j)->type == JSON_INTEGER)
-#define json_is_double(j) ((j)->type == JSON_DOUBLE)
-#define json_is_string(j) ((j)->type == JSON_STRING)
-#define json_is_array(j)  ((j)->type == JSON_ARRAY)
-#define json_is_object(j) ((j)->type == JSON_OBJECT)
+#define json_is_integer(j) ((j) && (j)->type == JSON_INTEGER)
+#define json_is_double(j) ((j) && (j)->type == JSON_DOUBLE)
+#define json_is_string(j) ((j) && (j)->type == JSON_STRING)
+#define json_is_array(j)  ((j) && (j)->type == JSON_ARRAY)
+#define json_is_object(j) ((j) && (j)->type == JSON_OBJECT)
 
 #define json_double(j) strtod((j)->start, NULL)
 #define json_integer(j) strtoll((j)->start, NULL, 0)
