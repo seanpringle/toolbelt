@@ -33,6 +33,7 @@
 #define max(a,b) ({ __typeof__(a) _a = (a); __typeof__(b) _b = (b); _a > _b ? _a: _b; })
 
 typedef int (*callback)(void*);
+typedef void (*vcallback)(void*);
 
 void*
 allocate (size_t bytes)
@@ -462,7 +463,7 @@ list_create ()
 }
 
 void
-list_empty (list_t *list, callback cb)
+list_empty (list_t *list, vcallback cb)
 {
   while (list->nodes)
   {
@@ -673,7 +674,7 @@ dict_create (dict_cb_hash hash, dict_cb_cmp compare)
 }
 
 void
-dict_empty (dict_t *dict, callback cbk, callback cbv)
+dict_empty (dict_t *dict, vcallback cbk, vcallback cbv)
 {
   for (int i = 0; i < PRIME_1000; i++)
   {
@@ -934,40 +935,29 @@ json_free (json_t *json)
   free(json);
 }
 
-uint32_t
-json_dict_hash (void *a)
-{
-  char *str = str_decode((char*)a, NULL, STR_ENCODE_DQUOTE);
-  uint32_t hash = djb_hash(str);
-  free(str);
-  return hash;
-}
-
-int
-json_dict_compare (void *a, void *b)
-{
-  char *str = str_decode((char*)a, NULL, STR_ENCODE_DQUOTE);
-  int cmp = strcmp(str, (char*)b);
-  free(str);
-  return cmp;
-}
-
 dict_t*
 json_dict (json_t *json)
 {
   if (json->type != JSON_OBJECT)
     return NULL;
 
-  dict_t *dict = dict_create(json_dict_hash, json_dict_compare);
+  dict_t *dict = dict_create(NULL, NULL);
 
   for (json_t *key = json->children; key; key = key->sibling)
   {
     if (key->type == JSON_STRING && key->sibling)
-      dict_set(dict, key->start, key->sibling);
+      dict_set(dict, str_decode(key->start, NULL, STR_ENCODE_DQUOTE), key->sibling);
 
     key = key->sibling;
   }
   return dict;
+}
+
+void
+json_dict_free (dict_t *dict)
+{
+  dict_empty(dict, free, NULL);
+  dict_free(dict);
 }
 
 list_t*
@@ -982,4 +972,10 @@ json_list (json_t *json)
     list_push(list, item);
 
   return list;
+}
+
+void
+json_list_free (list_t *list)
+{
+  list_free(list);
 }
