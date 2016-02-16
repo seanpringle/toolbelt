@@ -455,10 +455,22 @@ list_push (list_t *list, void *val)
   list_ins(list, list_count(list), val);
 }
 
+void*
+list_pop (list_t *list)
+{
+  return list->count ? list_del(list, list_count(list)-1): NULL;
+}
+
 void
 list_shove (list_t *list, void *val)
 {
   list_ins(list, 0, val);
+}
+
+void*
+list_shift (list_t *list)
+{
+  return list->count ? list_del(list, 0): NULL;
 }
 
 list_t*
@@ -936,6 +948,26 @@ json_free (json_t *json)
   }
 }
 
+json_t*
+json_object_get (json_t *json, char *name)
+{
+  if (!json || json->type != JSON_OBJECT)
+    return NULL;
+
+  for (json_t *key = json->children; key && key->sibling; key = key->sibling)
+  {
+    if (key->type == JSON_STRING && key->sibling)
+    {
+      char *str = json_string(key);
+      int found = !strcmp(str, name);
+      free(str);
+      if (found) return key->sibling;
+    }
+    key = key->sibling;
+  }
+  return NULL;
+}
+
 dict_t*
 json_dict (json_t *json)
 {
@@ -954,6 +986,22 @@ json_dict (json_t *json)
   }
   return dict;
 }
+
+json_t*
+json_array_get (json_t *json, int index)
+{
+  if (!json || json->type != JSON_ARRAY)
+    return NULL;
+
+  int i = 0;
+  for (json_t *item = json->children; item; item = item->sibling)
+  {
+    if (i == index) return item;
+    i++;
+  }
+  return NULL;
+}
+
 
 list_t*
 json_list (json_t *json)
