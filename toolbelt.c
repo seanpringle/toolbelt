@@ -735,7 +735,7 @@ json_t* json_parse (char *subject);
 #define json_double(j) strtod((j)->start, NULL)
 #define json_integer(j) strtoll((j)->start, NULL, 0)
 #define json_string(j) str_decode((j)->start, NULL, STR_ENCODE_DQUOTE)
-#define json_boolean(j) (strchr((j)->start[0], "tT") ? 1:0)
+#define json_boolean(j) (strchr("tT", (j)->start[0]) != NULL)
 
 json_t*
 json_parse_boolean (char *subject)
