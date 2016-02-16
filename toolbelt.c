@@ -359,6 +359,7 @@ typedef struct _list_node_t {
 typedef struct _list_t {
   list_node_t *nodes;
   size_t count;
+  vcallback empty;
 } list_t;
 
 void
@@ -450,8 +451,7 @@ list_first (list_t *list)
 void
 list_init (list_t *list)
 {
-  list->nodes = NULL;
-  list->count = 0;
+  memset(list, 0, sizeof(list_t));
 }
 
 list_t*
@@ -465,6 +465,7 @@ list_create ()
 void
 list_empty (list_t *list, vcallback cb)
 {
+  if (list->empty) list->empty(list);
   while (list->nodes)
   {
     list_node_t *node = list->nodes;
@@ -541,8 +542,9 @@ typedef struct _dict_node_t {
 
 typedef struct _dict_t {
   dict_node_t *chains[PRIME_1000];
-  dict_cb_cmp compare;
   dict_cb_hash hash;
+  dict_cb_cmp compare;
+  vcallback empty;
   size_t count;
 } dict_t;
 
@@ -559,12 +561,9 @@ dict_str_compare (void *a, void *b)
 }
 
 void
-dict_init (dict_t *dict, dict_cb_hash hash, dict_cb_cmp compare)
+dict_init (dict_t *dict)
 {
   memset(dict, 0, sizeof(dict_t));
-  dict->hash = hash ? hash: dict_str_hash;
-  dict->compare = compare ? compare: dict_str_compare;
-  dict->count = 0;
 }
 
 int
@@ -666,24 +665,25 @@ dict_first (dict_t *dict)
 }
 
 dict_t*
-dict_create (dict_cb_hash hash, dict_cb_cmp compare)
+dict_create ()
 {
   dict_t *dict = allocate(sizeof(dict_t));
-  dict_init(dict, hash, compare);
+  dict_init(dict);
+  dict->compare = dict_str_compare;
+  dict->hash = dict_str_hash;
   return dict;
 }
 
 void
-dict_empty (dict_t *dict, vcallback cbk, vcallback cbv)
+dict_empty (dict_t *dict)
 {
+  if (dict->empty) dict->empty(dict);
   for (int i = 0; i < PRIME_1000; i++)
   {
     while (dict->chains[i])
     {
       dict_node_t *node = dict->chains[i];
       dict->chains[i] = node->next;
-      if (cbk) cbk(node->key);
-      if (cbv) cbv(node->val);
       release(node, sizeof(dict_node_t));
     }
   }
@@ -693,7 +693,7 @@ dict_empty (dict_t *dict, vcallback cbk, vcallback cbv)
 void
 dict_free (dict_t *dict)
 {
-  dict_empty(dict, NULL, NULL);
+  dict_empty(dict);
   free(dict);
 }
 
@@ -951,13 +951,20 @@ json_free (json_t *json)
   }
 }
 
+void
+json_dict_empty (void *p)
+{
+  dict_each((dict_t*)p) free(loop.key);
+}
+
 dict_t*
 json_dict (json_t *json)
 {
   if (!json || json->type != JSON_OBJECT)
     return NULL;
 
-  dict_t *dict = dict_create(NULL, NULL);
+  dict_t *dict = dict_create();
+  dict->empty = json_dict_empty;
 
   for (json_t *key = json->children; key; key = key->sibling)
   {
@@ -967,16 +974,6 @@ json_dict (json_t *json)
     key = key->sibling;
   }
   return dict;
-}
-
-void
-json_dict_free (dict_t *dict)
-{
-  if (dict)
-  {
-    dict_empty(dict, free, NULL);
-    dict_free(dict);
-  }
 }
 
 list_t*
@@ -991,11 +988,4 @@ json_list (json_t *json)
     list_push(list, item);
 
   return list;
-}
-
-void
-json_list_free (list_t *list)
-{
-  if (list)
-    list_free(list);
 }
