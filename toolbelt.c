@@ -902,21 +902,13 @@ json_parse (char *subject)
   json_t *child = NULL;
 
   if (c == '{')
-  {
     child = json_parse_object(subject);
-  }
   else if (c == '[')
-  {
     child = json_parse_array(subject);
-  }
   else if (c == '"')
-  {
     child = json_parse_string(subject);
-  }
   else
-  {
     child = json_parse_number(subject);
-  }
   return child;
 }
 
@@ -938,7 +930,7 @@ json_free (json_t *json)
 dict_t*
 json_dict (json_t *json)
 {
-  if (json->type != JSON_OBJECT)
+  if (!json || json->type != JSON_OBJECT)
     return NULL;
 
   dict_t *dict = dict_create(NULL, NULL);
@@ -963,7 +955,7 @@ json_dict_free (dict_t *dict)
 list_t*
 json_list (json_t *json)
 {
-  if (json->type != JSON_ARRAY)
+  if (!json || json->type != JSON_ARRAY)
     return NULL;
 
   list_t *list = list_create();
