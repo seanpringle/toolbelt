@@ -13,6 +13,7 @@
 #include <time.h>
 #include <pthread.h>
 #include <math.h>
+#include <libgen.h>
 
 #define PRIME_1000 997
 #define PRIME_10000 9973
