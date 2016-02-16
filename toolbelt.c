@@ -747,15 +747,20 @@ json_string (json_t *json)
 }
 
 json_t*
-json_parse_boolean (char *subject)
+json_create ()
 {
   json_t *json = allocate(sizeof(json_t));
+  memset(json, 0, sizeof(json_t));
+  return json;
+}
+
+json_t*
+json_parse_boolean (char *subject)
+{
+  json_t *json = json_create();
   json->type   = JSON_BOOLEAN;
   json->start  = subject;
   json->length = str_skip(subject, isalpha);
-  json->sibling = NULL;
-  json->children = NULL;
-
   return json;
 }
 
@@ -768,11 +773,9 @@ json_parse_number (char *subject)
   strtoll(subject, &e1, 0);
   strtod(subject, &e2);
 
-  json_t *json = allocate(sizeof(json_t));
+  json_t *json = json_create();
   json->type   = JSON_NUMBER;
   json->start  = subject;
-  json->sibling = NULL;
-  json->children = NULL;
 
   if (e1 >= e2)
   {
@@ -784,7 +787,6 @@ json_parse_number (char *subject)
     json->length = e2 - subject;
     json->type = JSON_DOUBLE;
   }
-
   return json;
 }
 
@@ -803,12 +805,10 @@ json_parse_string (char *subject)
     end = subject + str_skip(subject, isname);
   }
 
-  json_t *json   = allocate(sizeof(json_t));
-  json->type     = JSON_STRING;
-  json->start    = subject;
-  json->length   = end - subject;
-  json->sibling  = NULL;
-  json->children = NULL;
+  json_t *json = json_create();
+  json->type   = JSON_STRING;
+  json->start  = subject;
+  json->length = end - subject;
 
   return json;
 }
@@ -816,19 +816,15 @@ json_parse_string (char *subject)
 json_t*
 json_parse_array (char *subject)
 {
-
   json_t *json = NULL;
   char *start = subject;
 
   if (*subject++ != '[')
     goto done;
 
-  json = allocate(sizeof(json_t));
+  json = json_create();
   json->type   = JSON_ARRAY;
   json->start  = start;
-  json->length = 0;
-  json->sibling = NULL;
-  json->children = NULL;
 
   json_t *last = NULL;
 
@@ -880,19 +876,15 @@ done:
 json_t*
 json_parse_object (char *subject)
 {
-
   json_t *json = NULL;
   char *start = subject;
 
   if (*subject++ != '{')
     goto done;
 
-  json = allocate(sizeof(json_t));
+  json = json_create();
   json->type   = JSON_OBJECT;
   json->start  = start;
-  json->length = 0;
-  json->sibling = NULL;
-  json->children = NULL;
 
   json_t *last = NULL;
 
@@ -965,16 +957,13 @@ json_parse (char *subject)
 void
 json_free (json_t *json)
 {
-  if (json)
+  while (json && json->children)
   {
-    while (json->children)
-    {
-      json_t *item = json->children;
-      json->children = item->sibling;
-      json_free(item);
-    }
-    free(json);
+    json_t *item = json->children;
+    json->children = item->sibling;
+    json_free(item);
   }
+  free(json);
 }
 
 json_t*

@@ -108,10 +108,19 @@ main (int argc, char *argv[])
     errorf("str_decode DQUOTE");
   free(dquote);
 
-  json_t *json = json_parse("{\"alpha\": 1, \"beta\": 2, \"gamma\": [1, 2, 3] }");
+  json_t *json, *jval;
+
+  json = json_parse("{\"alpha\": 1, \"beta\": 2, \"gamma\": [1, 2, 3] }");
 
   ensure(json)
-    errorf("json_parse");
+    errorf("json_parse 1");
+
+  json_free(json);
+
+  json = json_parse("{alpha: 1, beta: 2}");
+
+  ensure(json && (jval = json_object_get(json, "alpha")) && json_is_integer(jval) && json_integer(jval) == 1)
+    errorf("json_parse 2");
 
   json_free(json);
 
