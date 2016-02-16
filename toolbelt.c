@@ -940,7 +940,7 @@ json_dict (json_t *json)
   dict_t *dict = dict_create();
   dict->empty = dict_empty_free_keys;
 
-  for (json_t *key = json->children; key; key = key->sibling)
+  for (json_t *key = json->children; key && key->sibling; key = key->sibling)
   {
     if (key->type == JSON_STRING && key->sibling)
       dict_set(dict, json_string(key), key->sibling);
