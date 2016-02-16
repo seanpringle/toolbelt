@@ -32,9 +32,6 @@
 #define min(a,b) ({ __typeof__(a) _a = (a); __typeof__(b) _b = (b); _a < _b ? _a: _b; })
 #define max(a,b) ({ __typeof__(a) _a = (a); __typeof__(b) _b = (b); _a > _b ? _a: _b; })
 
-typedef int (*callback)(void*);
-typedef void (*vcallback)(void*);
-
 void*
 allocate (size_t bytes)
 {
@@ -111,27 +108,17 @@ typedef int (*str_cb_ischar)(int);
 int
 str_skip (char *s, str_cb_ischar cb)
 {
-  int count = 0;
-  str_each(s)
-  {
-    if (!cb(loop.value))
-      break;
-    count++;
-  }
-  return count;
+  char *p = s;
+  while (p && *p && cb(*p)) p++;
+  return p - s;
 }
 
 int
 str_scan (char *s, str_cb_ischar cb)
 {
-  int count = 0;
-  str_each(s)
-  {
-    if (cb(loop.value))
-      break;
-    count++;
-  }
-  return count;
+  char *p = s;
+  while (p && *p && !cb(*p)) p++;
+  return p - s;
 }
 
 char*
@@ -148,47 +135,13 @@ str_trim (char *str, str_cb_ischar cb)
   return str;
 }
 
-int
-istab (int c)
-{
-  return c == '\t';
-}
-
-int
-iscomma (int c)
-{
-  return c == ',';
-}
-
-int
-isperiod (int c)
-{
-  return c == '.';
-}
-
-int
-isforwardslash (int c)
-{
-  return c == '/';
-}
-
-int
-isbackslash (int c)
-{
-  return c == '\\';
-}
-
-int
-isdquote (int c)
-{
-  return c == '"';
-}
-
-int
-issquote (int c)
-{
-  return c == '\'';
-}
+int istab (int c) { return c == '\t'; }
+int iscomma (int c) { return c == ','; }
+int isperiod (int c) { return c == '.'; }
+int isforwardslash (int c) { return c == '/'; }
+int isbackslash (int c) { return c == '\\'; }
+int isdquote (int c) { return c == '"'; }
+int issquote (int c) { return c == '\''; }
 
 int
 str_count (char *str, str_cb_ischar cb)
@@ -466,14 +419,13 @@ list_create ()
 }
 
 void
-list_empty (list_t *list, vcallback cb)
+list_empty (list_t *list)
 {
   if (list->empty) list->empty(list);
   while (list->nodes)
   {
     list_node_t *node = list->nodes;
     list->nodes = node->next;
-    if (cb) cb(node->val);
     release(node, sizeof(list_node_t));
   }
   list->count = 0;
@@ -482,7 +434,7 @@ list_empty (list_t *list, vcallback cb)
 void
 list_free (list_t *list)
 {
-  list_empty(list, NULL);
+  list_empty(list);
   release(list, sizeof(list_t));
 }
 
@@ -532,6 +484,12 @@ list_scan_skip (char *s, str_cb_ischar cb)
     loop.node; \
     loop.index++, loop.node = list_next(loop.list, loop.node), loop.value = loop.node ? loop.node->val: NULL \
   )
+
+void
+list_empty_free (list_t *list)
+{
+  list_each(list) free(loop.value);
+}
 
 struct _dict_t;
 typedef void (*dict_callback)(struct _dict_t*);
@@ -715,6 +673,24 @@ dict_count (dict_t *dict)
     loop.node; \
     loop.index++, loop.node = dict_next(loop.dict, loop.node), loop.key = loop.node ? loop.node->key: NULL, loop.value = loop.node ? loop.node->val: NULL \
   )
+
+void
+dict_empty_free (dict_t *dict)
+{
+  dict_each(dict) { free(loop.key); free(loop.value); }
+}
+
+void
+dict_empty_free_keys (dict_t *dict)
+{
+  dict_each(dict) free(loop.key);
+}
+
+void
+dict_empty_free_vals (dict_t *dict)
+{
+  dict_each(dict) free(loop.value);
+}
 
 #define JSON_OBJECT 1
 #define JSON_ARRAY 2
@@ -957,12 +933,6 @@ json_free (json_t *json)
   }
 }
 
-void
-json_dict_empty (dict_t *dict)
-{
-  dict_each(dict) free(loop.key);
-}
-
 dict_t*
 json_dict (json_t *json)
 {
@@ -970,7 +940,7 @@ json_dict (json_t *json)
     return NULL;
 
   dict_t *dict = dict_create();
-  dict->empty = json_dict_empty;
+  dict->empty = dict_empty_free_keys;
 
   for (json_t *key = json->children; key; key = key->sibling)
   {
