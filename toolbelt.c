@@ -11,9 +11,9 @@
 #include <regex.h>
 #include <errno.h>
 #include <time.h>
-#include <pthread.h>
 #include <math.h>
 #include <libgen.h>
+#include <pthread.h>
 
 #define PRIME_1000 997
 #define PRIME_10000 9973
@@ -26,6 +26,8 @@
 
 #define min(a,b) ({ __typeof__(a) _a = (a); __typeof__(b) _b = (b); _a < _b ? _a: _b; })
 #define max(a,b) ({ __typeof__(a) _a = (a); __typeof__(b) _b = (b); _a > _b ? _a: _b; })
+
+typedef uint8_t byte_t;
 
 void*
 allocate (size_t bytes)
@@ -61,13 +63,13 @@ char*
 mfgets (FILE *file)
 {
   size_t bytes = 100;
-  char *line = allocate(bytes);
+  char *line = allocate(bytes+1);
   line[0] = 0;
 
-  while (fgets(line + bytes - 100, 100, file) && !strchr(line + bytes - 100, '\n'))
+  while (fgets(line + bytes - 100, 101, file) && !strchr(line + bytes - 100, '\n'))
   {
     bytes += 100;
-    line = reallocate(line, bytes);
+    line = reallocate(line, bytes+1);
   }
   if (ferror(file) || (!line[0] && feof(file)))
   {
@@ -1026,4 +1028,170 @@ json_array_get (json_t *json, int index)
     i++;
   }
   return NULL;
+}
+
+#define POOL_EXTENTS 3
+
+typedef struct _pool_extent_t {
+  off_t offset;
+  byte_t* data;
+  off_t first;
+  struct _pool_extent_t *next;
+} pool_extent_t;
+
+typedef struct _pool_t {
+  size_t extent_size;
+  size_t extent_count;
+  pool_extent_t *extents[POOL_EXTENTS];
+  size_t extent_bytes;
+  size_t size;
+  FILE *data;
+  size_t data_bytes;
+  char *name;
+} pool_t;
+
+void
+pool_extent_create (pool_t *pool)
+{
+  pool_extent_t *extent = malloc(sizeof(pool_extent_t));
+  extent->data = malloc(pool->extent_bytes);
+
+  for (int i = 0; i < POOL_EXTENTS-1; i++)
+    pool->extents[i] = pool->extents[i+1];
+
+  pool->extents[POOL_EXTENTS-1] = extent;
+
+  extent->offset = pool->extent_count * pool->extent_bytes;
+  extent->first = extent->offset;
+  pool->extent_count++;
+
+  errorf("create extent %lu", extent->offset);
+}
+
+void
+pool_extent_flush (pool_t *pool)
+{
+  pool_extent_t *extent = pool->extents[0];
+
+  ensure(fseeko(pool->data, extent->offset, SEEK_SET) == 0)
+    errorf("cannot seek pool: %s", pool->name);
+
+  ensure(fwrite(extent->data, 1, pool->extent_bytes, pool->data) == pool->extent_bytes)
+    errorf("cannot read pool: %s", pool->name);
+
+  pool->data_bytes += pool->extent_bytes;
+
+  free(extent->data);
+  free(extent);
+
+  pool_extent_create(pool);
+}
+
+byte_t*
+pool_cached (pool_t *pool, off_t position)
+{
+  if (position < pool->extents[0]->offset)
+    return NULL;
+
+  pool_extent_t *extent = NULL;
+
+  for (int i = 0; i < POOL_EXTENTS; i++)
+  {
+    extent = pool->extents[i];
+    if (extent->offset + pool->extent_bytes > position)
+      break;
+  }
+
+  ensure(extent)
+    errorf("attempt to access position beyond pool: %lu", position);
+
+  return extent->data + (position - extent->offset);
+}
+
+void
+pool_open (pool_t *pool, size_t size, size_t extent, char *name)
+{
+  memset(pool, 0, sizeof(pool_t));
+  pool->size = size;
+  pool->extent_size = extent;
+  pool->name = strdup(name);
+
+  pool->extent_count = 0;
+  pool->extent_bytes = size * extent;
+
+  ensure((pool->data = fopen(pool->name, "w")))
+    errorf("cannot create pool: %s", pool->name);
+
+  for (int i = 0; i < POOL_EXTENTS; i++)
+  {
+    pool_extent_create(pool);
+  }
+}
+
+void*
+pool_read (pool_t *pool, off_t position, void *ptr)
+{
+  byte_t *cached = pool_cached(pool, position);
+
+  if (cached)
+  {
+    //memmove(ptr, cached, pool->size);
+    return cached;
+  }
+  else
+  {
+    ensure(fseeko(pool->data, position, SEEK_SET) == 0)
+      errorf("cannot seek pool: %s", pool->name);
+
+    ensure(fread(ptr, 1, pool->size, pool->data) == pool->size)
+      errorf("cannot read pool: %s", pool->name);
+    return ptr;
+  }
+}
+
+void
+pool_write (pool_t *pool, off_t position, void *ptr)
+{
+  byte_t *cached = pool_cached(pool, position);
+
+  if (cached)
+  {
+    memmove(cached, ptr, pool->size);
+  }
+  else
+  {
+    ensure(fseeko(pool->data, position, SEEK_SET) == 0)
+      errorf("cannot seek pool: %s", pool->name);
+
+    ensure(fwrite(ptr, pool->size, 1, pool->data) == 1)
+      errorf("cannot write pool: %s", pool->name);
+  }
+}
+
+off_t
+pool_alloc (pool_t *pool)
+{
+  for (;;)
+  {
+    for (int i = 0; i < POOL_EXTENTS; i++)
+    {
+      pool_extent_t *extent = pool->extents[i];
+
+      if (extent->first < extent->offset + pool->extent_bytes)
+      {
+        off_t position = extent->first;
+        extent->first += pool->size;
+        return position;
+      }
+    }
+
+    pool_extent_flush(pool);
+    pool_extent_create(pool);
+  }
+}
+
+void
+pool_free (pool_t *pool, off_t position)
+{
+
 }
