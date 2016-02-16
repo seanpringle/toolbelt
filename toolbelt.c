@@ -35,6 +35,14 @@ allocate (size_t bytes)
   return ptr;
 }
 
+void*
+reallocate (void *ptr, size_t bytes)
+{
+  ptr = realloc(ptr, bytes);
+  ensure(ptr) errorf("malloc failed %lu bytes", bytes);
+  return ptr;
+}
+
 int
 regmatch (regex_t *re, char *subject)
 {
@@ -59,7 +67,7 @@ mfgets (FILE *file)
   while (fgets(line + bytes - 100, 100, file) && !strchr(line + bytes - 100, '\n'))
   {
     bytes += 100;
-    line = realloc(line, bytes);
+    line = reallocate(line, bytes);
   }
   if (ferror(file) || (!line[0] && feof(file)))
   {
@@ -297,7 +305,7 @@ str_decode (char *s, char **e, int format)
       if (length >= limit)
       {
         limit += 32;
-        result = realloc(result, limit+1);
+        result = reallocate(result, limit+1);
       }
 
       result[length++] = c;
