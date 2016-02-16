@@ -40,12 +40,6 @@ allocate (size_t bytes)
   return ptr;
 }
 
-void
-release (void *ptr)
-{
-  free(ptr);
-}
-
 int
 regmatch (regex_t *re, char *subject)
 {
@@ -74,7 +68,7 @@ mfgets (FILE *file)
   }
   if (ferror(file) || (!line[0] && feof(file)))
   {
-    release(line);
+    free(line);
     line = NULL;
   }
   return line;
@@ -198,7 +192,7 @@ str_encode (char *s, int format)
   {
     char *hex = str_encode(s, STR_ENCODE_HEX);
     result = mprintf("convert_from(decode('%s', 'hex'), 'UTF8')", hex);
-    release(hex);
+    free(hex);
   }
   else
   if (format == STR_ENCODE_DQUOTE)
@@ -221,11 +215,11 @@ str_encode (char *s, int format)
       else if (c ==  '"') change = mprintf("%s\\\"", result);
       else                change = mprintf("%s%c", result, c);
 
-      release(result);
+      free(result);
       result = change;
     }
     change = mprintf("%s\"", result);
-    release(result);
+    free(result);
     result = change;
   }
   else
@@ -373,7 +367,7 @@ list_del (list_t *list, off_t position)
     list_node_t *node = *prev;
     val = node->val;
     *prev = node->next;
-    release(node);
+    free(node);
     list->count--;
   }
   return val;
@@ -431,7 +425,7 @@ list_empty (list_t *list)
   {
     list_node_t *node = list->nodes;
     list->nodes = node->next;
-    release(node);
+    free(node);
   }
   list->count = 0;
 }
@@ -440,7 +434,7 @@ void
 list_free (list_t *list)
 {
   list_empty(list);
-  release(list);
+  free(list);
 }
 
 size_t
@@ -504,7 +498,7 @@ list_scan_skip (char *s, str_cb_ischar cb)
 void
 list_empty_free (list_t *list)
 {
-  list_each(list, void*) release(loop.value);
+  list_each(list, void*) free(loop.value);
 }
 
 struct _dict_t;
@@ -611,7 +605,7 @@ dict_del (dict_t *dict, void *key)
     dict_node_t *node = *prev;
     *prev = node->next;
     void *val = node->val;
-    release(node);
+    free(node);
     dict->count--;
     return val;
   }
@@ -664,7 +658,7 @@ dict_empty (dict_t *dict)
     {
       dict_node_t *node = dict->chains[i];
       dict->chains[i] = node->next;
-      release(node);
+      free(node);
     }
   }
   dict->count = 0;
@@ -674,7 +668,7 @@ void
 dict_free (dict_t *dict)
 {
   dict_empty(dict);
-  release(dict);
+  free(dict);
 }
 
 size_t
@@ -692,19 +686,19 @@ dict_count (dict_t *dict)
 void
 dict_empty_free (dict_t *dict)
 {
-  dict_each(dict, void*, void*) { release(loop.key); release(loop.value); }
+  dict_each(dict, void*, void*) { free(loop.key); free(loop.value); }
 }
 
 void
 dict_empty_free_keys (dict_t *dict)
 {
-  dict_each(dict, void*, void*) release(loop.key);
+  dict_each(dict, void*, void*) free(loop.key);
 }
 
 void
 dict_empty_free_vals (dict_t *dict)
 {
-  dict_each(dict, void*, void*) release(loop.value);
+  dict_each(dict, void*, void*) free(loop.value);
 }
 
 #define JSON_OBJECT 1
@@ -788,7 +782,7 @@ json_parse_string (char *subject)
     return NULL;
 
   char *str = str_decode(subject, &end, STR_ENCODE_DQUOTE);
-  release(str);
+  free(str);
 
   json_t *json = allocate(sizeof(json_t));
   json->type   = JSON_STRING;
@@ -962,7 +956,7 @@ json_free (json_t *json)
       json->children = item->sibling;
       json_free(item);
     }
-    release(json);
+    free(json);
   }
 }
 
@@ -978,7 +972,7 @@ json_object_get (json_t *json, char *name)
     {
       char *str = json_string(key);
       int found = !strcmp(str, name);
-      release(str);
+      free(str);
       if (found) return key->sibling;
     }
     key = key->sibling;
