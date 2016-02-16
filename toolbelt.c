@@ -302,7 +302,7 @@ str_decode (char *s, char **e, int format)
         else if (c == 'v')  c = '\v';
       }
 
-      if (length >= limit)
+      if (length >= limit-1)
       {
         limit += 32;
         result = reallocate(result, limit+1);
