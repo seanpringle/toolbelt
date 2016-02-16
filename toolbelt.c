@@ -9,15 +9,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <regex.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <errno.h>
 #include <time.h>
 #include <pthread.h>
-#include <libgen.h>
 #include <math.h>
 
 #define PRIME_1000 997
