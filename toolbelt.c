@@ -479,10 +479,9 @@ list_scan_skip (char *s, str_cb_ischar cb)
 }
 
 #define list_each(l,_val_type) for ( \
-  struct { int index; list_t *list; list_node_t *node; _val_type value; } \
-    loop = { 0, (l), (l)->nodes, (l)->nodes ? (l)->nodes->val: NULL }; \
-    loop.node; \
-    loop.index++, loop.node = list_next(loop.list, loop.node), loop.value = loop.node ? loop.node->val: NULL \
+  struct { int index; list_t *list; list_node_t *node; _val_type value; } loop = { 0, (l), NULL, NULL }; \
+    (loop.node = list_next(loop.list, loop.node)) && ((loop.value = loop.node ? loop.node->val: NULL) || 1); \
+    loop.index++ \
   )
 
 void
@@ -668,10 +667,9 @@ dict_count (dict_t *dict)
 }
 
 #define dict_each(l,_key_type,_val_type) for ( \
-  struct { int index; dict_t *dict; dict_node_t *node; _key_type key; _val_type value; } \
-    loop = { 0, (l), dict_first((l)), dict_first((l)) ? dict_first((l))->key: NULL, dict_first((l)) ? dict_first((l))->val: NULL }; \
-    loop.node; \
-    loop.index++, loop.node = dict_next(loop.dict, loop.node), loop.key = loop.node ? loop.node->key: NULL, loop.value = loop.node ? loop.node->val: NULL \
+  struct { int index; dict_t *dict; dict_node_t *node; _key_type key; _val_type value; } loop = { 0, (l), NULL, NULL, NULL }; \
+    (loop.node = dict_next(loop.dict, loop.node)) && ((loop.key = loop.node ? loop.node->key: NULL) || 1) && ((loop.value = loop.node ? loop.node->val: NULL) || 1); \
+    loop.index++ \
   )
 
 void
