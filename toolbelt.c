@@ -136,6 +136,7 @@ int isforwardslash (int c) { return c == '/'; }
 int isbackslash (int c) { return c == '\\'; }
 int isdquote (int c) { return c == '"'; }
 int issquote (int c) { return c == '\''; }
+int isname (int c) { return isalnum(c) || c == '_'; }
 
 int
 str_count (char *str, str_cb_ischar cb)
@@ -160,6 +161,15 @@ str_strip (char *s, str_cb_ischar cb)
     s++;
   }
   return count;
+}
+
+char*
+str_copy (char *s, size_t length)
+{
+  char *a = allocate(length+1);
+  memmove(a, s, length);
+  a[length] = 0;
+  return a;
 }
 
 int
@@ -728,8 +738,13 @@ json_t* json_parse (char *subject);
 
 #define json_double(j) strtod((j)->start, NULL)
 #define json_integer(j) strtoll((j)->start, NULL, 0)
-#define json_string(j) str_decode((j)->start, NULL, STR_ENCODE_DQUOTE)
 #define json_boolean(j) (strchr("tT", (j)->start[0]) != NULL)
+
+char*
+json_string (json_t *json)
+{
+  return isalpha(json->start[0]) ? str_copy(json->start, str_skip(json->start, isname)): str_decode(json->start, NULL, STR_ENCODE_DQUOTE);
+}
 
 json_t*
 json_parse_boolean (char *subject)
@@ -778,17 +793,21 @@ json_parse_string (char *subject)
 {
   char *end = NULL;
 
-  if (subject[0] != '"')
-    return NULL;
+  if (subject[0] == '"')
+  {
+    char *str = str_decode(subject, &end, STR_ENCODE_DQUOTE);
+    free(str);
+  }
+  else
+  {
+    end = subject + str_skip(subject, isname);
+  }
 
-  char *str = str_decode(subject, &end, STR_ENCODE_DQUOTE);
-  free(str);
-
-  json_t *json = allocate(sizeof(json_t));
-  json->type   = JSON_STRING;
-  json->start  = subject;
-  json->length = end - subject;
-  json->sibling = NULL;
+  json_t *json   = allocate(sizeof(json_t));
+  json->type     = JSON_STRING;
+  json->start    = subject;
+  json->length   = end - subject;
+  json->sibling  = NULL;
   json->children = NULL;
 
   return json;
@@ -852,7 +871,6 @@ json_parse_array (char *subject)
       json->children = item;
     }
   }
-
   json->length = subject - start;
 
 done:
@@ -917,7 +935,6 @@ json_parse_object (char *subject)
       json->children = item;
     }
   }
-
   json->length = subject - start;
 
 done:
@@ -936,10 +953,10 @@ json_parse (char *subject)
     child = json_parse_object(subject);
   else if (c == '[')
     child = json_parse_array(subject);
-  else if (c == '"')
-    child = json_parse_string(subject);
   else if (strchr("tTfF", c))
     child = json_parse_boolean(subject);
+  else if (c == '"' || isalpha(c))
+    child = json_parse_string(subject);
   else
     child = json_parse_number(subject);
   return child;
