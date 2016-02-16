@@ -725,6 +725,15 @@ typedef struct _json_t {
 
 json_t* json_parse (char *subject);
 
+#define json_is_number(j) ((j)->type == JSON_NUMBER)
+#define json_is_string(j) ((j)->type == JSON_STRING)
+#define json_is_array(j)  ((j)->type == JSON_ARRAY)
+#define json_is_object(j) ((j)->type == JSON_OBJECT)
+
+#define json_double(j) strtod((j)->start, NULL)
+#define json_number(j) strtoll((j)->start, NULL, 0)
+#define json_string(j) str_decode((j)->start, NULL, STR_ENCODE_DQUOTE)
+
 json_t*
 json_parse_number (char *subject)
 {
@@ -938,7 +947,7 @@ json_dict (json_t *json)
   for (json_t *key = json->children; key; key = key->sibling)
   {
     if (key->type == JSON_STRING && key->sibling)
-      dict_set(dict, str_decode(key->start, NULL, STR_ENCODE_DQUOTE), key->sibling);
+      dict_set(dict, json_string(key), key->sibling);
 
     key = key->sibling;
   }
