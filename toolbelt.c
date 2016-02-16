@@ -923,8 +923,8 @@ json_free (json_t *json)
       json->children = item->sibling;
       json_free(item);
     }
+    free(json);
   }
-  free(json);
 }
 
 dict_t*
@@ -948,8 +948,11 @@ json_dict (json_t *json)
 void
 json_dict_free (dict_t *dict)
 {
-  dict_empty(dict, free, NULL);
-  dict_free(dict);
+  if (dict)
+  {
+    dict_empty(dict, free, NULL);
+    dict_free(dict);
+  }
 }
 
 list_t*
@@ -969,5 +972,6 @@ json_list (json_t *json)
 void
 json_list_free (list_t *list)
 {
-  list_free(list);
+  if (list)
+    list_free(list);
 }
