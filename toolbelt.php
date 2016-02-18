@@ -933,6 +933,12 @@ class Query
         return static::$log;
     }
 
+    public static function error_log($sql=null)
+    {
+        foreach ($this->log($sql) as $line)
+            error_log($line);
+    }
+
     public function __toString()
     {
         $table   = $this->sql_table();
