@@ -892,9 +892,11 @@ class Query
     protected $where  = array();
     protected $group  = array();
     protected $order  = array();
-    protected $limit  = array();
     protected $pairs  = array();
     protected $joins  = array();
+
+    protected $offset = 0;
+    protected $limit  = 0;
 
     protected $type;
 
@@ -1112,7 +1114,7 @@ class Query
 
     public function sql_limit()
     {
-        return $this->limit ? 'limit '.$this->limit: '';
+        return $this->limit ? 'offset '.$this->offset.' limit '.$this->limit: '';
     }
 
     public function sql_joins()
@@ -1356,7 +1358,8 @@ class Query
 
     function limit($limit, $offset=0)
     {
-        $this->limit = $offset ? "$offset $limit": "$limit";
+        $this->limit  = $limit;
+        $this->offset = $offset;
         return $this;
     }
 
