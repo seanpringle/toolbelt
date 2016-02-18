@@ -696,6 +696,15 @@ class Dict implements ArrayAccess, Iterator, Serializable
     }
 
     /**
+     * Grep
+     * @return Dict
+     */
+    public function grepv($pattern)
+    {
+        return $this->grep($pattern, true);
+    }
+
+    /**
      * Apply callback to each pair. Destructive! See copy().
      * @param  callable $call
      * @return Dict
