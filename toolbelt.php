@@ -1386,7 +1386,7 @@ class Query
         return $this->join($table, $alias, 'left');
     }
 
-    private function read($sql=null)
+    public function read($sql=null)
     {
         if (!self::$db)
             self::connect();
@@ -1413,7 +1413,7 @@ class Query
         return $this;
     }
 
-    private function write($sql=null)
+    public function write($sql=null)
     {
         if (!self::$db)
             self::connect();
