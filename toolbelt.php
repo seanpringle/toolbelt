@@ -198,7 +198,7 @@ class Text implements ArrayAccess, Iterator, Serializable
         return preg_match_all($pattern, $this->value, $this->matches);
     }
 
-    public function split($pattern=null)
+    public function split($pattern)
     {
         if (!$this->value) return array();
         return preg_split($pattern, $this->value);
