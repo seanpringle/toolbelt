@@ -681,6 +681,21 @@ class Dict implements ArrayAccess, Iterator, Serializable
     }
 
     /**
+     * Grep
+     * @return Dict
+     */
+    public function grep($pattern, $invert=false)
+    {
+        foreach ($this->_data as $key => $val)
+        {
+            $match = preg_match($pattern, $val);
+            if (!$match && !$invert) unset($this->$key);
+            if ($match && $invert) unset($this->$key);
+        }
+        return $this;
+    }
+
+    /**
      * Apply callback to each pair. Destructive! See copy().
      * @param  callable $call
      * @return Dict
