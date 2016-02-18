@@ -935,7 +935,7 @@ class Query
 
     public static function error_log($sql=null)
     {
-        foreach ($this->log($sql) as $line)
+        foreach (self::log($sql) as $line)
             error_log($line);
     }
 
