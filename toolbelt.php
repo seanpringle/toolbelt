@@ -210,7 +210,7 @@ class Text implements ArrayAccess, Iterator, Serializable
         return explode($pattern, $this->value);
     }
 
-    public function replace($pattern=null, $replace)
+    public function replace($pattern, $replace='')
     {
         $this->value = preg_replace($pattern, $replace, $this->value);
         return $this;
