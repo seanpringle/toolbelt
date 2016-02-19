@@ -1054,6 +1054,11 @@ class Query
         return $this->alias;
     }
 
+    public function where_clauses()
+    {
+        return $this->where;
+    }
+
     public function sql_table()
     {
         $table = is_query($this->table) ? "({$this->table})": $this->table;
@@ -1370,7 +1375,7 @@ class Query
 
     public function where_clause($query)
     {
-        $this->where[] = sprintf('(%s)', substr($query->sql_where(), 6));
+        $this->where[] = $query->where_clauses();
         return $this;
     }
 
