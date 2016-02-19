@@ -1368,20 +1368,26 @@ class Query
         return $this->where_exists($value, false);
     }
 
-    function limit($limit, $offset=0)
+    public function where_clause($query)
+    {
+        $this->where[] = sprintf('(%s)', substr($query->sql_where(), 6));
+        return $this;
+    }
+
+    public function limit($limit, $offset=0)
     {
         $this->limit  = $limit;
         $this->offset = $offset;
         return $this;
     }
 
-    function order($field, $dir='asc')
+    public function order($field, $dir='asc')
     {
         $this->order[$field] = $dir;
         return $this;
     }
 
-    function group($field)
+    public function group($field)
     {
         $this->group[] = $field;
         return $this;
