@@ -1459,6 +1459,9 @@ class Query
 
     public function fetch_all($index=null)
     {
+        if ($this->error)
+            return null;
+
         if (!$this->rs)
             $this->select()->read()->ok();
 
