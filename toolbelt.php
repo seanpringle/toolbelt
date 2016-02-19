@@ -233,7 +233,7 @@ class Text implements ArrayAccess, Iterator, Serializable
     public function ellipsis($length)
     {
         if (strlen($this->value) > $lenght)
-            $this->value = substr($this->value, $length).'...';
+            $this->value = substr($this->value, 0, $length).'...';
         return $this;
     }
 }
