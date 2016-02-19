@@ -230,6 +230,12 @@ class Text implements ArrayAccess, Iterator, Serializable
         $this->value .= ($pairs ? '?'.$pairs: '');
         return $this;
     }
+    public function ellipsis($length)
+    {
+        if (strlen($this->value) > $lenght)
+            $this->value = substr($this->value, $length).'...';
+        return $this;
+    }
 }
 
 /**
