@@ -1317,6 +1317,12 @@ class Query
     public function where_like($field, $value) { return $this->where_cmp($field, 'like', $value); }
     public function where_regex($field, $value) { return $this->where_cmp($field, '~', $value); }
 
+    public function where_between($field, $low, $high)
+    {
+        $this->where[] = sprintf('between %s and %s', self::quote_value($low), self::quote_value($high));
+        return $this;
+    }
+
     public function where_not($field)
     {
         $this->where[] = 'not '.$this->quote_field($field);
