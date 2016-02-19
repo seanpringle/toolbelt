@@ -1373,7 +1373,7 @@ class Query
         return $this->where_exists($value, false);
     }
 
-    public function where_clause($query)
+    public function where_or($query)
     {
         $this->where[] = $query->where_clauses();
         return $this;
