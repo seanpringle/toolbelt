@@ -1319,7 +1319,7 @@ class Query
 
     public function where_between($field, $low, $high)
     {
-        $this->where[] = sprintf('between %s and %s', self::quote_value($low), self::quote_value($high));
+        $this->where[] = sprintf('%s between %s and %s', self::quote_field($field), self::quote_value($low), self::quote_value($high));
         return $this;
     }
 
