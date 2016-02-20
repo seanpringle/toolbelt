@@ -1104,7 +1104,6 @@ typedef struct _pool_t {
   size_t extent_bytes;
   size_t size;
   FILE *data;
-  FILE *data_ro;
   size_t data_bytes;
   char *name;
 } pool_t;
@@ -1123,8 +1122,6 @@ pool_extent_create (pool_t *pool)
   extent->offset = pool->extent_count * pool->extent_bytes;
   extent->first = extent->offset;
   pool->extent_count++;
-
-  errorf("create extent %lu", extent->offset);
 }
 
 void
