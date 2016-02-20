@@ -363,6 +363,15 @@ typedef struct _list_t {
   list_callback empty;
 } list_t;
 
+list_node_t* list_next(list_t*, list_node_t*);
+
+#define list_each(l,_val_) for ( \
+  struct { int index; list_t *list; list_node_t *node; int l1; } loop = { 0, (l), NULL, 0 }; \
+    !loop.l1 && (loop.node = list_next(loop.list, loop.node)) && (loop.l1 = 1); \
+    loop.index++ \
+  ) \
+    for (_val_ = loop.node->val; loop.l1; loop.l1 = !loop.l1) 
+
 void
 list_ins (list_t *list, off_t position, void *val)
 {
@@ -422,13 +431,10 @@ list_del (list_t *list, off_t position)
 void*
 list_get (list_t *list, off_t position)
 {
-  list_node_t **prev = &list->nodes;
-  for (
-    off_t i = 0;
-    *prev && i < position;
-    prev = &((*prev)->next), i++
-  );
-  return *prev ? (*prev)->val: NULL;
+  list_each(list, void *val)
+    if (loop.index == position)
+      return val;
+  return NULL;
 }
 
 list_node_t*
@@ -441,12 +447,6 @@ list_next (list_t *list, list_node_t *node)
     return node->next;
 
   return NULL;
-}
-
-list_node_t*
-list_first (list_t *list)
-{
-  return list_next(list, NULL);
 }
 
 void
@@ -535,13 +535,6 @@ list_scan_skip (char *s, str_cb_ischar cb)
   return list;
 }
 
-#define list_each(l,_val_) for ( \
-  struct { int index; list_t *list; list_node_t *node; int l1; } loop = { 0, (l), NULL, 0 }; \
-    !loop.l1 && (loop.node = list_next(loop.list, loop.node)) && (loop.l1 = 1); \
-    loop.index++ \
-  ) \
-    for (_val_ = loop.node->val; loop.l1; loop.l1 = !loop.l1) 
-
 void
 list_empty_free (list_t *list)
 {
@@ -562,12 +555,38 @@ typedef struct _dict_node_t {
 } dict_node_t;
 
 typedef struct _dict_t {
-  dict_node_t *chains[PRIME_1000];
+  dict_node_t **chains;
   dict_callback_hash hash;
   dict_callback_cmp compare;
   dict_callback empty;
   size_t count;
+  size_t width;
+  size_t depth;
 } dict_t;
+
+dict_node_t* dict_next(dict_t*, dict_node_t*);
+
+#define dict_each(l,_key_,_val_) for ( \
+  struct { int index; dict_t *dict; dict_node_t *node; int l1; int l2; } loop = { 0, (l), NULL, 0, 0 }; \
+    !loop.l1 && !loop.l2 && (loop.node = dict_next(loop.dict, loop.node)) && (loop.l1 = 1) && (loop.l2 = 1); \
+    loop.index++ \
+  ) \
+    for (_key_ = loop.node->key; loop.l1; loop.l1 = !loop.l1) \
+      for (_val_ = loop.node->val; loop.l2; loop.l2 = !loop.l2)
+
+#define dict_each_key(l,_key_) for ( \
+  struct { int index; dict_t *dict; dict_node_t *node; int l1; } loop = { 0, (l), NULL, 0 }; \
+    !loop.l1 && (loop.node = dict_next(loop.dict, loop.node)) && (loop.l1 = 1); \
+    loop.index++ \
+  ) \
+    for (_key_ = loop.node->key; loop.l1; loop.l1 = !loop.l1) 
+
+#define dict_each_val(l,_val_) for ( \
+  struct { int index; dict_t *dict; dict_node_t *node; int l1; } loop = { 0, (l), NULL, 0 }; \
+    !loop.l1 && (loop.node = dict_next(loop.dict, loop.node)) && (loop.l1 = 1); \
+    loop.index++ \
+  ) \
+    for (_val_ = loop.node->val; loop.l1; loop.l1 = !loop.l1) 
 
 uint32_t
 dict_str_hash (void *a)
@@ -582,9 +601,41 @@ dict_str_compare (void *a, void *b)
 }
 
 void
-dict_init (dict_t *dict)
+dict_init (dict_t *dict, size_t width)
 {
   memset(dict, 0, sizeof(dict_t));
+  dict->width = width;
+  dict->depth = 5;
+
+  size_t bytes = sizeof(dict_node_t*) * dict->width;
+  dict->chains = allocate(bytes);
+  memset(dict->chains, 0, bytes);
+}
+
+void
+dict_resize (dict_t *dict, size_t width)
+{
+  dict_t tmp;
+  dict_init(&tmp, width);
+  tmp.hash = dict->hash;
+  tmp.compare = dict->compare;
+
+  for (off_t i = 0; i < dict->width; i++)
+  {
+    while (dict->chains[i])
+    {
+      dict_node_t *node = dict->chains[i];
+      dict->chains[i] = node->next;
+
+      node->hash = tmp.hash(node->key);
+      int chain = node->hash % tmp.width;
+      node->next = tmp.chains[chain];
+      tmp.chains[chain] = node;
+    }
+  }
+  free(dict->chains);
+  dict->chains = tmp.chains;
+  dict->width  = tmp.width;
 }
 
 int
@@ -592,7 +643,7 @@ dict_set (dict_t *dict, void *key, void *val)
 {
   int rc = 1;
   uint32_t hv = dict->hash(key);
-  int chain = hv % PRIME_1000;
+  int chain = hv % dict->width;
 
   dict_node_t *node = dict->chains[chain];
   while (node && dict->compare(node->key, key))
@@ -609,13 +660,25 @@ dict_set (dict_t *dict, void *key, void *val)
   }
   node->key = key;
   node->val = val;
+
+  if (dict->count > dict->width * dict->depth)
+  {
+    if (dict->width == PRIME_1000)
+      dict_resize(dict, PRIME_10000);
+    else
+    if (dict->width == PRIME_10000)
+      dict_resize(dict, PRIME_100000);
+    else
+    if (dict->width == PRIME_100000)
+      dict_resize(dict, PRIME_1000000);
+  }
   return rc;
 }
 
 dict_node_t*
 dict_find (dict_t *dict, void *key)
 {
-  int chain = dict->hash(key) % PRIME_1000;
+  int chain = dict->hash(key) % dict->width;
 
   dict_node_t *node = dict->chains[chain];
   while (node && dict->compare(node->key, key))
@@ -641,7 +704,7 @@ dict_has (dict_t *dict, void *key)
 void*
 dict_del (dict_t *dict, void *key)
 {
-  int chain = dict->hash(key) % PRIME_1000;
+  int chain = dict->hash(key) % dict->width;
 
   dict_node_t **prev = &dict->chains[chain];
   while (*prev && dict->compare((*prev)->key, key))
@@ -664,7 +727,7 @@ dict_next (dict_t *dict, dict_node_t *node)
 {
   if (!node)
   {
-    for (int i = 0; i < PRIME_1000; i++)
+    for (int i = 0; i < dict->width; i++)
       if (dict->chains[i]) return dict->chains[i];
     return NULL;
   }
@@ -672,24 +735,16 @@ dict_next (dict_t *dict, dict_node_t *node)
   if (node->next)
     return node->next;
 
-  uint32_t hv = node->hash;
-
-  for (int i = (hv % PRIME_1000)+1; i < PRIME_1000; i++)
+  for (int i = (node->hash % dict->width)+1; i < dict->width; i++)
     if (dict->chains[i]) return dict->chains[i];
   return NULL;
-}
-
-dict_node_t*
-dict_first (dict_t *dict)
-{
-  return dict_next(dict, NULL);
 }
 
 dict_t*
 dict_create ()
 {
   dict_t *dict = allocate(sizeof(dict_t));
-  dict_init(dict);
+  dict_init(dict, PRIME_1000);
   dict->compare = dict_str_compare;
   dict->hash = dict_str_hash;
   return dict;
@@ -699,7 +754,7 @@ void
 dict_empty (dict_t *dict)
 {
   if (dict->empty) dict->empty(dict);
-  for (int i = 0; i < PRIME_1000; i++)
+  for (int i = 0; i < dict->width; i++)
   {
     while (dict->chains[i])
     {
@@ -715,6 +770,7 @@ void
 dict_free (dict_t *dict)
 {
   dict_empty(dict);
+  free(dict->chains);
   free(dict);
 }
 
@@ -723,28 +779,6 @@ dict_count (dict_t *dict)
 {
   return dict->count;
 }
-
-#define dict_each(l,_key_,_val_) for ( \
-  struct { int index; dict_t *dict; dict_node_t *node; int l1; int l2; } loop = { 0, (l), NULL, 0, 0 }; \
-    !loop.l1 && !loop.l2 && (loop.node = dict_next(loop.dict, loop.node)) && (loop.l1 = 1) && (loop.l2 = 1); \
-    loop.index++ \
-  ) \
-    for (_key_ = loop.node->key; loop.l1; loop.l1 = !loop.l1) \
-      for (_val_ = loop.node->val; loop.l2; loop.l2 = !loop.l2)
-
-#define dict_each_key(l,_key_) for ( \
-  struct { int index; dict_t *dict; dict_node_t *node; int l1; } loop = { 0, (l), NULL, 0 }; \
-    !loop.l1 && (loop.node = dict_next(loop.dict, loop.node)) && (loop.l1 = 1); \
-    loop.index++ \
-  ) \
-    for (_key_ = loop.node->key; loop.l1; loop.l1 = !loop.l1) 
-
-#define dict_each_val(l,_val_) for ( \
-  struct { int index; dict_t *dict; dict_node_t *node; int l1; } loop = { 0, (l), NULL, 0 }; \
-    !loop.l1 && (loop.node = dict_next(loop.dict, loop.node)) && (loop.l1 = 1); \
-    loop.index++ \
-  ) \
-    for (_val_ = loop.node->val; loop.l1; loop.l1 = !loop.l1) 
 
 void
 dict_empty_free (dict_t *dict)

@@ -45,12 +45,18 @@ main (int argc, char *argv[])
   list_ins(list, 0, "world");
   list_ins(list, 0, "hello");
 
+  int ln = 0;
   list_each(list, char *str)
-    printf("%s\n", str);
+    ln += strlen(str);
+  ensure(ln == 10)
+    errorf("list_each");
 
   ensure(list_count(list) == 2) errorf("list_length");
 
   ensure((item = list_get(list, 0)) && !strcmp(item, "hello"))
+    errorf("list_get");
+
+  ensure((item = list_get(list, 1)) && !strcmp(item, "world"))
     errorf("list_get");
 
   ensure((item = list_del(list, 1)) && !strcmp(item, "world"))
@@ -68,11 +74,14 @@ main (int argc, char *argv[])
   dict_set(dict, "alpha", "beta");
   dict_set(dict, "fu", "bar");
 
-//  dict_each(dict, char*, char*)
-//    printf("%s => %s\n", loop.key, loop.value);
-
+  int dn = 0;
   dict_each(dict, char *key, char *val)
-    printf("%d %s => %s\n", loop.index, key, val);
+  {
+    dn += strlen(key);
+    dn += strlen(val);
+  }
+  ensure(dn == 24)
+    errorf("dict_each");
 
   ensure((item = dict_get(dict, "hello")) && !strcmp(item, "world"))
     errorf("dict_get 1");
@@ -94,6 +103,18 @@ main (int argc, char *argv[])
 
   ensure(dict_get(dict, &i4) == NULL)
     errorf("dict_get 3");
+
+  dict_free(dict);
+
+  dict = dict_create();
+  dict->empty = dict_empty_free;
+
+  for (int i = 0; i < 1000000; i++)
+  {
+    char tmp[32];
+    sprintf(tmp, "%d", i);
+    dict_set(dict, strdup(tmp), strdup(tmp));
+  }
 
   dict_free(dict);
 
