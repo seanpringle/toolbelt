@@ -99,25 +99,37 @@ mprintf (char *pattern, ...)
   return result;
 }
 
-#define str_each(s) for (struct { int index; char *cursor; char value; } loop = { 0, (s), 0 }; \
-  (loop.value = loop.cursor[0]); loop.cursor++)
+#define str_each(l,_val_) for ( \
+  struct { int index; char *subject; int l1; } loop = { 0, (l), 0 }; \
+    !loop.l1 && loop.subject[loop.index] && (loop.l1 = 1); \
+    loop.index++ \
+  ) \
+    for (_val_ = loop.subject[loop.index]; loop.l1; loop.l1 = !loop.l1) 
 
 typedef int (*str_cb_ischar)(int);
 
 int
 str_skip (char *s, str_cb_ischar cb)
 {
-  char *p = s;
-  while (p && *p && cb(*p)) p++;
-  return p - s;
+  int n = 0;
+  str_each(s, char c)
+  {
+    if (!cb(c)) break;
+    n++;
+  }
+  return n;
 }
 
 int
 str_scan (char *s, str_cb_ischar cb)
 {
-  char *p = s;
-  while (p && *p && !cb(*p)) p++;
-  return p - s;
+  int n = 0;
+  str_each(s, char c)
+  {
+    if (cb(c)) break;
+    n++;
+  }
+  return n;
 }
 
 char*
@@ -147,8 +159,8 @@ int
 str_count (char *str, str_cb_ischar cb)
 {
   int count = 0;
-  str_each(str)
-    if (cb(loop.value)) count++;
+  str_each(str, char c)
+    if (cb(c)) count++;
   return count;
 }
 
@@ -239,10 +251,8 @@ str_encode (char *s, int format)
     result = mprintf("\"");
     char *change = NULL;
 
-    str_each(s)
+    str_each(s, char c)
     {
-      int c = loop.value;
-
            if (c == 0x07) change = mprintf("%s\\a", result);
       else if (c == 0x08) change = mprintf("%s\\b", result);
       else if (c == 0x0c) change = mprintf("%s\\f", result);
@@ -300,24 +310,21 @@ str_decode (char *s, char **e, int format)
     size_t length = 0, limit = 32;
     result = allocate(32);
 
-    str_each(s)
+    str_each(s, char c)
     {
-      int c = loop.value;
-
       if (e)
-        *e = loop.cursor;
+        *e = s + loop.index;
 
       if (c == '"')
       {
         if (e)
-          *e = loop.cursor+1;
+          *e = s + loop.index + 1;
         break;
       }
 
       if (c == '\\')
       {
-        loop.cursor++;
-        c = loop.cursor[0];
+        c = s[++loop.index];
 
              if (c == 'a')  c = '\a';
         else if (c == 'b')  c = '\b';
@@ -528,16 +535,17 @@ list_scan_skip (char *s, str_cb_ischar cb)
   return list;
 }
 
-#define list_each(l,_val_type) for ( \
-  struct { int index; list_t *list; list_node_t *node; _val_type value; } loop = { 0, (l), NULL, NULL }; \
-    (loop.node = list_next(loop.list, loop.node)) && ((loop.value = loop.node ? loop.node->val: NULL) || 1); \
+#define list_each(l,_val_) for ( \
+  struct { int index; list_t *list; list_node_t *node; int l1; } loop = { 0, (l), NULL, 0 }; \
+    !loop.l1 && (loop.node = list_next(loop.list, loop.node)) && (loop.l1 = 1); \
     loop.index++ \
-  )
+  ) \
+    for (_val_ = loop.node->val; loop.l1; loop.l1 = !loop.l1) 
 
 void
 list_empty_free (list_t *list)
 {
-  list_each(list, void*) free(loop.value);
+  list_each(list, void *val) free(val);
 }
 
 struct _dict_t;
@@ -716,28 +724,44 @@ dict_count (dict_t *dict)
   return dict->count;
 }
 
-#define dict_each(l,_key_type,_val_type) for ( \
-  struct { int index; dict_t *dict; dict_node_t *node; _key_type key; _val_type value; } loop = { 0, (l), NULL, NULL, NULL }; \
-    (loop.node = dict_next(loop.dict, loop.node)) && ((loop.key = loop.node ? loop.node->key: NULL) || 1) && ((loop.value = loop.node ? loop.node->val: NULL) || 1); \
+#define dict_each(l,_key_,_val_) for ( \
+  struct { int index; dict_t *dict; dict_node_t *node; int l1; int l2; } loop = { 0, (l), NULL, 0, 0 }; \
+    !loop.l1 && !loop.l2 && (loop.node = dict_next(loop.dict, loop.node)) && (loop.l1 = 1) && (loop.l2 = 1); \
     loop.index++ \
-  )
+  ) \
+    for (_key_ = loop.node->key; loop.l1; loop.l1 = !loop.l1) \
+      for (_val_ = loop.node->val; loop.l2; loop.l2 = !loop.l2)
+
+#define dict_each_key(l,_key_) for ( \
+  struct { int index; dict_t *dict; dict_node_t *node; int l1; } loop = { 0, (l), NULL, 0 }; \
+    !loop.l1 && (loop.node = dict_next(loop.dict, loop.node)) && (loop.l1 = 1); \
+    loop.index++ \
+  ) \
+    for (_key_ = loop.node->key; loop.l1; loop.l1 = !loop.l1) 
+
+#define dict_each_val(l,_val_) for ( \
+  struct { int index; dict_t *dict; dict_node_t *node; int l1; } loop = { 0, (l), NULL, 0 }; \
+    !loop.l1 && (loop.node = dict_next(loop.dict, loop.node)) && (loop.l1 = 1); \
+    loop.index++ \
+  ) \
+    for (_val_ = loop.node->val; loop.l1; loop.l1 = !loop.l1) 
 
 void
 dict_empty_free (dict_t *dict)
 {
-  dict_each(dict, void*, void*) { free(loop.key); free(loop.value); }
+  dict_each(dict, void *key, void *val) { free(key); free(val); }
 }
 
 void
 dict_empty_free_keys (dict_t *dict)
 {
-  dict_each(dict, void*, void*) free(loop.key);
+  dict_each_key(dict, void *key) free(key);
 }
 
 void
 dict_empty_free_vals (dict_t *dict)
 {
-  dict_each(dict, void*, void*) free(loop.value);
+  dict_each_val(dict, void *val) free(val);
 }
 
 #define JSON_OBJECT 1
@@ -1054,8 +1078,8 @@ typedef struct _pool_t {
 void
 pool_extent_create (pool_t *pool)
 {
-  pool_extent_t *extent = malloc(sizeof(pool_extent_t));
-  extent->data = malloc(pool->extent_bytes);
+  pool_extent_t *extent = allocate(sizeof(pool_extent_t));
+  extent->data = allocate(pool->extent_bytes);
 
   for (int i = 0; i < POOL_EXTENTS-1; i++)
     pool->extents[i] = pool->extents[i+1];

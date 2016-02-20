@@ -45,8 +45,8 @@ main (int argc, char *argv[])
   list_ins(list, 0, "world");
   list_ins(list, 0, "hello");
 
-  list_each(list, char*)
-    printf("%s\n", loop.value);
+  list_each(list, char *str)
+    printf("%s\n", str);
 
   ensure(list_count(list) == 2) errorf("list_length");
 
@@ -68,8 +68,11 @@ main (int argc, char *argv[])
   dict_set(dict, "alpha", "beta");
   dict_set(dict, "fu", "bar");
 
-  dict_each(dict, char*, char*)
-    printf("%s => %s\n", loop.key, loop.value);
+//  dict_each(dict, char*, char*)
+//    printf("%s => %s\n", loop.key, loop.value);
+
+  dict_each(dict, char *key, char *val)
+    printf("%d %s => %s\n", loop.index, key, val);
 
   ensure((item = dict_get(dict, "hello")) && !strcmp(item, "world"))
     errorf("dict_get 1");
