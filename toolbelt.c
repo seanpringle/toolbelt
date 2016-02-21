@@ -1300,6 +1300,13 @@ pool_free (pool_t *pool, off_t position)
   pool->bitmap[position / 8] |= 1 << (position % 8);
 }
 
+void
+pool_sync (pool_t *pool)
+{
+  ensure(msync(pool->map, pool->head->psize, MS_SYNC) == 0 || errno == EBUSY)
+    errorf("pool_sync: %s %s", pool->name, errno == EINVAL ? "EINVAL": "ENOMEM");
+}
+
 int
 pool_is_free (pool_t *pool, off_t position)
 {
@@ -1395,6 +1402,6 @@ pool_free_chunk (pool_t *pool, off_t pos, size_t bytes)
   size_t slots = bytes / pool->head->osize + (bytes % pool->head->osize ? 1:0);
 
   for (int i = 0; i < slots; i++)
-    pool_free(pool, pos + i);
+    pool_free(pool, pos + (i * pool->head->osize));
 }
 
