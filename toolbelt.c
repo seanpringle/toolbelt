@@ -1109,6 +1109,18 @@ typedef struct _pool_t {
 } pool_t;
 
 void
+pool_bitmap (pool_t *pool)
+{
+  free(pool->bitmap);
+
+  pool->bitmap = allocate(pool->head->psize / 8 + 1);
+  memset(pool->bitmap, 0, pool->head->psize / 8 + 1);
+
+  for (off_t pos = pool->head->pfree; pos; pos = *((off_t*)(pool->map + pos)))
+    pool->bitmap[pos / 8] |= 1 << (pos % 8);
+}
+
+void
 pool_open (pool_t *pool, char *name, size_t osize, size_t pstep)
 {
   osize = max(osize, sizeof(off_t*));
@@ -1117,6 +1129,7 @@ pool_open (pool_t *pool, char *name, size_t osize, size_t pstep)
   pool->head = NULL;
   pool->fd   = 0;
   pool->name = strdup(name);
+  pool->bitmap = NULL;
 
   struct stat st;
 
@@ -1172,11 +1185,7 @@ pool_open (pool_t *pool, char *name, size_t osize, size_t pstep)
     pool->head->psize = bytes;
   }
 
-  pool->bitmap = allocate(pool->head->psize / 8 + 1);
-  memset(pool->bitmap, 0, pool->head->psize / 8 + 1);
-
-  for (off_t pos = pool->head->pfree; pos; pos = *((off_t*)(pool->map + pos)))
-    pool->bitmap[pos / 8] |= 1 << (pos % 8);
+  pool_bitmap(pool);
 }
 
 void
@@ -1267,6 +1276,8 @@ pool_alloc (pool_t *pool)
 
     pool->head = pool->map;
     pool->head->psize = psize + bytes;
+
+    pool_bitmap(pool);
   }
 
   off_t position = pool->head->pnext;
