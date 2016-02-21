@@ -1258,8 +1258,6 @@ pool_alloc (pool_t *pool)
 
     pool->head = pool->map;
     pool->head->psize = psize + bytes;
-
-    errorf("expand %s %lu", pool->name, pool->head->psize);
   }
 
   off_t position = pool->head->pnext;
