@@ -1277,3 +1277,23 @@ pool_free (pool_t *pool, off_t position)
   *((off_t*)(pool->map + position)) = pool->head->pfree;
   pool->head->pfree = position;
 }
+
+int
+pool_is_free (pool_t *pool, off_t position)
+{
+  for (off_t p = *((off_t*)(pool->map + pool->head->pfree)); p; p = *((off_t*)(pool->map + p)))
+    if (p == position) return 1;
+  return 0;
+}
+
+off_t
+pool_next (pool_t *pool, off_t position)
+{
+  if (!position)
+    position = sizeof(pool_header_t);
+
+  while (position < pool->head->psize && !pool_is_free(pool, position))
+    position += pool->head->osize;
+
+  return (position < pool->head->psize) ? position: 0; 
+}
