@@ -1316,3 +1316,10 @@ pool_next (pool_t *pool, off_t position)
 
   return (position < pool->head->psize) ? position: 0; 
 }
+
+#define pool_each(l,_val_) for ( \
+  struct { int index; pool_t *pool; off_t pos; int l1; } loop = { 0, (l), 0, 0 }; \
+    !loop.l1 && (loop.pos = pool_next(loop.pool, loop.pos)) && (loop.l1 = 1); \
+    loop.index++ \
+  ) \
+    for (_val_ = pool_read(loop.pool, loop.pos, NULL); loop.l1; loop.l1 = !loop.l1) 

@@ -149,21 +149,25 @@ main (int argc, char *argv[])
   json_free(json);
 
   pool_t pool;
+  unlink("pool");
   pool_open(&pool, "pool", sizeof(uint32_t), 1000);
+
+  uint32_t pc1 = 0;
 
   for (uint32_t i = 0; i < 2000; i++)
   {
     off_t pos = pool_alloc(&pool);
     pool_write(&pool, pos, &i);
+    pc1 += i;
   }
 
-  int pc = 0;
+  uint32_t pc2 = 0;
 
-  for (off_t pos = pool_next(&pool, 0); pos; pos = pool_next(&pool, pos))
-    pc++;
+  pool_each(&pool, uint32_t *i)
+    pc2 += *i;
 
-  ensure(pc == 2000)
-    errorf("pool_next %d", pc);
+  ensure(pc1 == pc2)
+    errorf("pool_next %u %u", pc1, pc2);
 
   pool_close(&pool);
 
