@@ -109,7 +109,7 @@ main (int argc, char *argv[])
   dict = dict_create();
   dict->empty = dict_empty_free;
 
-  for (int i = 0; i < 1000000; i++)
+  for (int i = 0; i < 10000; i++)
   {
     char tmp[32];
     sprintf(tmp, "%d", i);
@@ -147,6 +147,17 @@ main (int argc, char *argv[])
     errorf("json_parse 2");
 
   json_free(json);
+
+  pool_t pool;
+  pool_open(&pool, "pool", sizeof(uint32_t));
+
+  for (uint32_t i = 0; i < 2000; i++)
+  {
+    off_t pos = pool_alloc(&pool);
+    pool_write(&pool, pos, &i);
+  }
+
+  pool_close(&pool);
 
   return EXIT_SUCCESS;
 }

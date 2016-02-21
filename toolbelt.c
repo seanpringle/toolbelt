@@ -14,6 +14,10 @@
 #include <math.h>
 #include <libgen.h>
 #include <pthread.h>
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #define PRIME_1000 997
 #define PRIME_10000 9973
@@ -1088,168 +1092,189 @@ json_array_get (json_t *json, int index)
   return NULL;
 }
 
-#define POOL_EXTENTS 3
-
-typedef struct _pool_extent_t {
-  off_t offset;
-  byte_t* data;
-  off_t first;
-  struct _pool_extent_t *next;
-} pool_extent_t;
+typedef struct _pool_header_t {
+  size_t osize;
+  size_t psize;
+  size_t pstep;
+  off_t pnext;
+  off_t pfree;
+} pool_header_t;
 
 typedef struct _pool_t {
-  size_t extent_size;
-  size_t extent_count;
-  pool_extent_t *extents[POOL_EXTENTS];
-  size_t extent_bytes;
-  size_t size;
-  FILE *data;
-  size_t data_bytes;
   char *name;
+  pool_header_t *head;
+  int fd;
+  void *map;
 } pool_t;
 
 void
-pool_extent_create (pool_t *pool)
+pool_open (pool_t *pool, char *name, size_t osize)
 {
-  pool_extent_t *extent = allocate(sizeof(pool_extent_t));
-  extent->data = allocate(pool->extent_bytes);
+  osize = max(osize, sizeof(off_t*));
 
-  for (int i = 0; i < POOL_EXTENTS-1; i++)
-    pool->extents[i] = pool->extents[i+1];
-
-  pool->extents[POOL_EXTENTS-1] = extent;
-
-  extent->offset = pool->extent_count * pool->extent_bytes;
-  extent->first = extent->offset;
-  pool->extent_count++;
-}
-
-void
-pool_extent_flush (pool_t *pool)
-{
-  pool_extent_t *extent = pool->extents[0];
-
-  ensure(fseeko(pool->data, extent->offset, SEEK_SET) == 0)
-    errorf("cannot seek pool: %s", pool->name);
-
-  ensure(fwrite(extent->data, 1, pool->extent_bytes, pool->data) == pool->extent_bytes)
-    errorf("cannot read pool: %s", pool->name);
-
-  pool->data_bytes += pool->extent_bytes;
-
-  free(extent->data);
-  free(extent);
-
-  pool_extent_create(pool);
-}
-
-byte_t*
-pool_cached (pool_t *pool, off_t position)
-{
-  if (position < pool->extents[0]->offset)
-    return NULL;
-
-  pool_extent_t *extent = NULL;
-
-  for (int i = 0; i < POOL_EXTENTS; i++)
-  {
-    extent = pool->extents[i];
-    if (extent->offset + pool->extent_bytes > position)
-      break;
-  }
-
-  ensure(extent)
-    errorf("attempt to access position beyond pool: %lu", position);
-
-  return extent->data + (position - extent->offset);
-}
-
-void
-pool_open (pool_t *pool, size_t size, size_t extent, char *name)
-{
-  memset(pool, 0, sizeof(pool_t));
-  pool->size = size;
-  pool->extent_size = extent;
+  pool->map  = NULL;
+  pool->head = NULL;
+  pool->fd   = 0;
   pool->name = strdup(name);
 
-  pool->extent_count = 0;
-  pool->extent_bytes = size * extent;
+  struct stat st;
 
-  ensure((pool->data = fopen(pool->name, "w")))
-    errorf("cannot create pool: %s", pool->name);
-
-  for (int i = 0; i < POOL_EXTENTS; i++)
+  if (stat(pool->name, &st) == 0)
   {
-    pool_extent_create(pool);
-  }
-}
+    ensure((st.st_size - sizeof(pool_header_t)) % osize == 0)
+      errorf("pool file exists with invalid size: %s", pool->name);
 
-void*
-pool_read (pool_t *pool, off_t position, void *ptr, FILE *data)
-{
-  byte_t *cached = pool_cached(pool, position);
+    pool->fd = open(pool->name, O_RDWR);
 
-  if (cached)
-  {
-    //memmove(ptr, cached, pool->size);
-    return cached;
+    ensure(pool->fd >= 0)
+      errorf("cannot reopen pool: %s", pool->name);
+
+    pool->map = mmap(NULL, st.st_size, PROT_READ|PROT_WRITE, MAP_SHARED, pool->fd, 0);
+
+    ensure(pool->map && pool->map != MAP_FAILED)
+      errorf("cannot mmap pool: %s", pool->name);
+
+    pool->head = pool->map;
+
+    ensure(pool->head->osize == osize
+      && pool->head->pnext <= pool->head->psize
+      && pool->head->pfree <= pool->head->psize)
+        errorf("pool head mismatch: %s", pool->name);
   }
   else
   {
-    if (!data) data = pool->data;
+    pool->fd = open(pool->name, O_CREAT|O_RDWR, S_IRUSR|S_IWUSR);
 
-    ensure(fseeko(data, position, SEEK_SET) == 0)
-      errorf("cannot seek pool: %s", pool->name);
+    ensure(pool->fd >= 0)
+      errorf("cannot create pool: %s", pool->name);
 
-    ensure(fread(ptr, 1, pool->size, data) == pool->size)
-      errorf("cannot read pool: %s", pool->name);
+    size_t bytes = 1000 * osize + sizeof(pool_header_t);
+
+    void *ptr = allocate(bytes);
+    memset(ptr, 0, bytes);
+
+    ensure(write(pool->fd, ptr, bytes) == bytes)
+      errorf("cannot write pool: %s", pool->name);
+
+    free(ptr);
+
+    pool->map = mmap(NULL, bytes, PROT_READ|PROT_WRITE, MAP_SHARED, pool->fd, 0);
+
+    ensure(pool->map && pool->map != MAP_FAILED)
+      errorf("cannot mmap pool: %s", pool->name);
+
+    pool->head = pool->map;
+    pool->head->pnext = sizeof(pool_header_t);
+    pool->head->osize = osize;
+    pool->head->pstep = 1000;
+    pool->head->psize = bytes;
+  }
+}
+
+void
+pool_close (pool_t *pool)
+{
+  ensure(munmap(pool->map, pool->head->psize) == 0)
+    errorf("cannot unmap pool: %s", pool->name);
+
+  ensure(close(pool->fd) == 0)
+    errorf("cannot close pool: %s", pool->name);
+
+  pool->fd = 0;
+  free(pool->name);
+  pool->name = NULL;
+  pool->head = NULL;
+  pool->map = NULL;
+}
+
+void*
+pool_read (pool_t *pool, off_t position, void *ptr)
+{
+  ensure(pool->head)
+    errorf("atempt to access closed pool");
+
+  ensure(position > 0 && position < pool->head->psize)
+    errorf("attempt to access outside pool: %lu %s", position, pool->name);
+
+  if (ptr)
+  {
+    memmove(ptr, pool->map + position, pool->head->osize);
     return ptr;
   }
+
+  return pool->map + position;
 }
 
 void
 pool_write (pool_t *pool, off_t position, void *ptr)
 {
-  byte_t *cached = pool_cached(pool, position);
+  ensure(pool->head)
+    errorf("atempt to access closed pool");
 
-  if (cached)
-  {
-    memmove(cached, ptr, pool->size);
-  }
-  else
-  {
-    ensure(fseeko(pool->data, position, SEEK_SET) == 0)
-      errorf("cannot seek pool: %s", pool->name);
+  ensure(position > 0 && position < pool->head->psize)
+    errorf("attempt to access outside pool: %lu %s", position, pool->name);
 
-    ensure(fwrite(ptr, pool->size, 1, pool->data) == 1)
-      errorf("cannot write pool: %s", pool->name);
-  }
+  if (ptr && ptr != pool->map + position)
+    memmove(pool->map + position, ptr, pool->head->osize);
 }
 
 off_t
 pool_alloc (pool_t *pool)
 {
-  for (;;)
+  ensure(pool->head)
+    errorf("atempt to access closed pool");
+
+  if (pool->head->pfree)
   {
-    for (int i = 0; i < POOL_EXTENTS; i++)
-    {
-      pool_extent_t *extent = pool->extents[i];
-
-      if (extent->first < extent->offset + pool->extent_bytes)
-      {
-        off_t position = extent->first;
-        extent->first += pool->size;
-        return position;
-      }
-    }
-
-    pool_extent_flush(pool);
-    pool_extent_create(pool);
+    off_t position = pool->head->pfree;
+    pool->head->pfree = *((off_t*)(pool->map + pool->head->pfree));
+    return position;
   }
+
+  if (pool->head->pnext == pool->head->psize)
+  {
+    size_t bytes = pool->head->pstep * pool->head->osize;
+    size_t psize = pool->head->psize;
+
+    ensure(munmap(pool->map, psize) == 0)
+      errorf("cannot unmap pool: %s", pool->name);
+
+    void *ptr = allocate(bytes);
+    memset(ptr, 0, bytes);
+
+    ensure(lseek(pool->fd, psize, SEEK_SET))
+      errorf("cannot seek pool: %s", pool->name);
+
+    ensure(write(pool->fd, ptr, bytes) == bytes)
+      errorf("cannot write pool: %s", pool->name);
+
+    free(ptr);
+
+    pool->map = mmap(NULL, psize + bytes, PROT_READ|PROT_WRITE, MAP_SHARED, pool->fd, 0);
+
+    ensure(pool->map && pool->map != MAP_FAILED)
+      errorf("cannot mmap pool: %s", pool->name);
+
+    pool->head = pool->map;
+    pool->head->psize = psize + bytes;
+
+    errorf("expand %s %lu", pool->name, pool->head->psize);
+  }
+
+  off_t position = pool->head->pnext;
+  pool->head->pnext += pool->head->osize;
+  return position;
 }
 
 void
 pool_free (pool_t *pool, off_t position)
 {
+  ensure(pool->head)
+    errorf("atempt to access closed pool");
 
+  ensure(position > 0 && position < pool->head->psize)
+    errorf("attempt to access outside pool: %lu %s", position, pool->name);
+
+  *((off_t*)(pool->map + position)) = pool->head->pfree;
+  pool->head->pfree = position;
 }
