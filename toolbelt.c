@@ -1281,7 +1281,7 @@ pool_free (pool_t *pool, off_t position)
 int
 pool_is_free (pool_t *pool, off_t position)
 {
-  for (off_t p = *((off_t*)(pool->map + pool->head->pfree)); p; p = *((off_t*)(pool->map + p)))
+  for (off_t p = pool->head->pfree; p; p = *((off_t*)(pool->map + p)))
     if (p == position) return 1;
   return 0;
 }
