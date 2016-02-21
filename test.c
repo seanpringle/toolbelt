@@ -157,8 +157,13 @@ main (int argc, char *argv[])
     pool_write(&pool, pos, &i);
   }
 
+  int pc = 0;
+
   for (off_t pos = pool_next(&pool, 0); pos; pos = pool_next(&pool, pos))
-    printf("%lu\n", pos);
+    pc++;
+
+  ensure(pc == 2000)
+    errorf("pool_next %d", pc);
 
   pool_close(&pool);
 

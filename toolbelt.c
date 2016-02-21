@@ -1211,7 +1211,7 @@ pool_read (pool_t *pool, off_t position, void *ptr)
   ensure(pool->head)
     errorf("atempt to access closed pool");
 
-  ensure(position > 0 && position < pool->head->psize)
+  ensure(position >= sizeof(pool_header_t) && position < pool->head->psize)
     errorf("attempt to access outside pool: %lu %s", position, pool->name);
 
   if (ptr)
@@ -1229,7 +1229,7 @@ pool_write (pool_t *pool, off_t position, void *ptr)
   ensure(pool->head)
     errorf("atempt to access closed pool");
 
-  ensure(position > 0 && position < pool->head->psize)
+  ensure(position >= sizeof(pool_header_t) && position < pool->head->psize)
     errorf("attempt to access outside pool: %lu %s", position, pool->name);
 
   if (ptr && ptr != pool->map + position)
@@ -1291,7 +1291,7 @@ pool_free (pool_t *pool, off_t position)
   ensure(pool->head)
     errorf("atempt to access closed pool");
 
-  ensure(position > 0 && position < pool->head->psize)
+  ensure(position >= sizeof(pool_header_t) && position < pool->head->psize)
     errorf("attempt to access outside pool: %lu %s", position, pool->name);
 
   *((off_t*)(pool->map + position)) = pool->head->pfree;
@@ -1303,7 +1303,7 @@ pool_free (pool_t *pool, off_t position)
 int
 pool_is_free (pool_t *pool, off_t position)
 {
-  return position > pool->head->pnext || pool->bitmap[position / 8] & 1 << (position % 8) ? 1:0;
+  return position >= pool->head->pnext || pool->bitmap[position / 8] & 1 << (position % 8) ? 1:0;
 }
 
 off_t
