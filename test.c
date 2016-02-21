@@ -171,5 +171,15 @@ main (int argc, char *argv[])
 
   pool_close(&pool);
 
+  unlink("pool");
+  pool_open(&pool, "pool", 4, 1000);
+
+  strcpy(pool_read_chunk(&pool, pool_alloc_chunk(&pool, 6), 6, NULL), "hello");
+  strcpy(pool_read_chunk(&pool, pool_alloc_chunk(&pool, 6), 6, NULL), "world");
+  strcpy(pool_read_chunk(&pool, pool_alloc_chunk(&pool, 17), 17, NULL), "once upon a time");
+  strcpy(pool_read_chunk(&pool, pool_alloc_chunk(&pool, 2), 2, NULL), "A");
+
+  pool_close(&pool);
+
   return EXIT_SUCCESS;
 }

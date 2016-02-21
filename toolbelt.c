@@ -1323,3 +1323,78 @@ pool_next (pool_t *pool, off_t position)
     loop.index++ \
   ) \
     for (_val_ = pool_read(loop.pool, loop.pos, NULL); loop.l1; loop.l1 = !loop.l1) 
+
+void*
+pool_read_chunk (pool_t *pool, off_t position, size_t bytes, void *ptr)
+{
+  ensure(pool->head)
+    errorf("atempt to access closed pool");
+
+  ensure(position >= sizeof(pool_header_t) && position < pool->head->psize - bytes)
+    errorf("attempt to access outside pool: %lu %s", position, pool->name);
+
+  if (ptr)
+  {
+    memmove(ptr, pool->map + position, bytes);
+    return ptr;
+  }
+
+  return pool->map + position;
+}
+
+void
+pool_write_chunk (pool_t *pool, off_t position, size_t bytes, void *ptr)
+{
+  ensure(pool->head)
+    errorf("atempt to access closed pool");
+
+  ensure(position >= sizeof(pool_header_t) && position < pool->head->psize - bytes)
+    errorf("attempt to access outside pool: %lu %s", position, pool->name);
+
+  if (ptr && ptr != pool->map + position)
+    memmove(pool->map + position, ptr, bytes);
+}
+
+off_t
+pool_alloc_chunk (pool_t *pool, size_t bytes)
+{
+  if (bytes <= pool->head->osize)
+    return pool_alloc(pool);
+
+  size_t slots = (bytes / pool->head->osize) + (bytes % pool->head->osize ? 1:0);
+
+  for (off_t pos = pool->head->pfree; pos; pos = *((off_t*)(pool->map + pos)))
+  {
+    int found = 1;
+    for (int i = 0; found && i < slots; i++)
+      found = pool_is_free(pool, pos + (i * pool->head->osize));
+    
+    if (found)
+    {
+      for (int i = 0; i < slots; i++)
+        pool->bitmap[(pos + (i * pool->head->osize)) / 8] &= ~(1 << ((pos + (i * pool->head->osize)) % 8));
+      return pos;
+    }
+  }
+
+  off_t pfree = pool->head->pfree;
+  pool->head->pfree = 0;
+
+  off_t pos = pool->head->pnext;
+
+  for (int i = 0; i < slots; i++)
+    pool_alloc(pool);
+
+  pool->head->pfree = pfree;
+  return pos;
+}
+
+void
+pool_free_chunk (pool_t *pool, off_t pos, size_t bytes)
+{
+  size_t slots = bytes / pool->head->osize + (bytes % pool->head->osize ? 1:0);
+
+  for (int i = 0; i < slots; i++)
+    pool_free(pool, pos + i);
+}
+
