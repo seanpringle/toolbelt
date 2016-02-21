@@ -1108,7 +1108,7 @@ typedef struct _pool_t {
 } pool_t;
 
 void
-pool_open (pool_t *pool, char *name, size_t osize)
+pool_open (pool_t *pool, char *name, size_t osize, size_t pstep)
 {
   osize = max(osize, sizeof(off_t*));
 
@@ -1137,6 +1137,7 @@ pool_open (pool_t *pool, char *name, size_t osize)
     pool->head = pool->map;
 
     ensure(pool->head->osize == osize
+      && pool->head->pstep == pstep
       && pool->head->pnext <= pool->head->psize
       && pool->head->pfree <= pool->head->psize)
         errorf("pool head mismatch: %s", pool->name);
@@ -1166,7 +1167,7 @@ pool_open (pool_t *pool, char *name, size_t osize)
     pool->head = pool->map;
     pool->head->pnext = sizeof(pool_header_t);
     pool->head->osize = osize;
-    pool->head->pstep = 1000;
+    pool->head->pstep = pstep;
     pool->head->psize = bytes;
   }
 }

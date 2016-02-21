@@ -149,7 +149,7 @@ main (int argc, char *argv[])
   json_free(json);
 
   pool_t pool;
-  pool_open(&pool, "pool", sizeof(uint32_t));
+  pool_open(&pool, "pool", sizeof(uint32_t), 1000);
 
   for (uint32_t i = 0; i < 2000; i++)
   {
