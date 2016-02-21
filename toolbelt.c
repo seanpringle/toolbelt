@@ -1276,11 +1276,11 @@ pool_alloc (pool_t *pool)
 
     pool->head = pool->map;
     pool->head->psize = psize + bytes;
-
     pool_bitmap(pool);
   }
 
   off_t position = pool->head->pnext;
+  memset(pool->map + position, 0, pool->head->osize);
   pool->head->pnext += pool->head->osize;
   return position;
 }
@@ -1303,8 +1303,8 @@ pool_free (pool_t *pool, off_t position)
 void
 pool_sync (pool_t *pool)
 {
-  ensure(msync(pool->map, pool->head->psize, MS_SYNC) == 0 || errno == EBUSY)
-    errorf("pool_sync: %s %s", pool->name, errno == EINVAL ? "EINVAL": "ENOMEM");
+  ensure(msync(pool->map, pool->head->pnext, MS_SYNC) == 0)
+    errorf("pool sync failed: %s", pool->name);
 }
 
 int
