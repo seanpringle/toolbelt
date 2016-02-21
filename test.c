@@ -157,6 +157,9 @@ main (int argc, char *argv[])
     pool_write(&pool, pos, &i);
   }
 
+  for (off_t pos = pool_next(&pool, 0); pos; pos = pool_next(&pool, pos))
+    printf("%lu\n", pos);
+
   pool_close(&pool);
 
   return EXIT_SUCCESS;

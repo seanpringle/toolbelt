@@ -1289,10 +1289,9 @@ pool_is_free (pool_t *pool, off_t position)
 off_t
 pool_next (pool_t *pool, off_t position)
 {
-  if (!position)
-    position = sizeof(pool_header_t);
+  position += position ? pool->head->osize: sizeof(pool_header_t);
 
-  while (position < pool->head->psize && !pool_is_free(pool, position))
+  while (position < pool->head->psize && pool_is_free(pool, position))
     position += pool->head->osize;
 
   return (position < pool->head->psize) ? position: 0; 
