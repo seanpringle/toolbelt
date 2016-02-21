@@ -1105,6 +1105,7 @@ typedef struct _pool_t {
   pool_header_t *head;
   int fd;
   void *map;
+  unsigned char *bitmap;
 } pool_t;
 
 void
@@ -1170,6 +1171,12 @@ pool_open (pool_t *pool, char *name, size_t osize, size_t pstep)
     pool->head->pstep = pstep;
     pool->head->psize = bytes;
   }
+
+  pool->bitmap = allocate(pool->head->psize / 8 + 1);
+  memset(pool->bitmap, 0, pool->head->psize / 8 + 1);
+
+  for (off_t pos = pool->head->pfree; pos; pos = *((off_t*)(pool->map + pos)))
+    pool->bitmap[pos / 8] |= 1 << (pos % 8);
 }
 
 void
@@ -1183,6 +1190,7 @@ pool_close (pool_t *pool)
 
   pool->fd = 0;
   free(pool->name);
+  free(pool->bitmap);
   pool->name = NULL;
   pool->head = NULL;
   pool->map = NULL;
@@ -1229,6 +1237,7 @@ pool_alloc (pool_t *pool)
   {
     off_t position = pool->head->pfree;
     pool->head->pfree = *((off_t*)(pool->map + pool->head->pfree));
+    pool->bitmap[position / 8] &= ~(1 << (position % 8));
     return position;
   }
 
@@ -1276,14 +1285,14 @@ pool_free (pool_t *pool, off_t position)
 
   *((off_t*)(pool->map + position)) = pool->head->pfree;
   pool->head->pfree = position;
+
+  pool->bitmap[position / 8] |= 1 << (position % 8);
 }
 
 int
 pool_is_free (pool_t *pool, off_t position)
 {
-  for (off_t p = pool->head->pfree; p; p = *((off_t*)(pool->map + p)))
-    if (p == position) return 1;
-  return 0;
+  return position > pool->head->pnext || pool->bitmap[position / 8] & 1 << (position % 8) ? 1:0;
 }
 
 off_t
