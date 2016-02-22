@@ -108,7 +108,7 @@ mprintf (char *pattern, ...)
     !loop.l1 && loop.subject[loop.index] && (loop.l1 = 1); \
     loop.index++ \
   ) \
-    for (_val_ = loop.subject[loop.index]; loop.l1; loop.l1 = !loop.l1) 
+    for (_val_ = loop.subject[loop.index]; loop.l1; loop.l1 = !loop.l1)
 
 typedef int (*str_cb_ischar)(int);
 
@@ -374,7 +374,7 @@ list_node_t* list_next(list_t*, list_node_t*);
     !loop.l1 && (loop.node = list_next(loop.list, loop.node)) && (loop.l1 = 1); \
     loop.index++ \
   ) \
-    for (_val_ = loop.node->val; loop.l1; loop.l1 = !loop.l1) 
+    for (_val_ = loop.node->val; loop.l1; loop.l1 = !loop.l1)
 
 void
 list_ins (list_t *list, off_t position, void *val)
@@ -583,14 +583,14 @@ dict_node_t* dict_next(dict_t*, dict_node_t*);
     !loop.l1 && (loop.node = dict_next(loop.dict, loop.node)) && (loop.l1 = 1); \
     loop.index++ \
   ) \
-    for (_key_ = loop.node->key; loop.l1; loop.l1 = !loop.l1) 
+    for (_key_ = loop.node->key; loop.l1; loop.l1 = !loop.l1)
 
 #define dict_each_val(l,_val_) for ( \
   struct { int index; dict_t *dict; dict_node_t *node; int l1; } loop = { 0, (l), NULL, 0 }; \
     !loop.l1 && (loop.node = dict_next(loop.dict, loop.node)) && (loop.l1 = 1); \
     loop.index++ \
   ) \
-    for (_val_ = loop.node->val; loop.l1; loop.l1 = !loop.l1) 
+    for (_val_ = loop.node->val; loop.l1; loop.l1 = !loop.l1)
 
 uint32_t
 dict_str_hash (void *a)
@@ -1208,9 +1208,6 @@ pool_close (pool_t *pool)
 void*
 pool_read (pool_t *pool, off_t position, void *ptr)
 {
-  ensure(pool->head)
-    errorf("atempt to access closed pool");
-
   ensure(position >= sizeof(pool_header_t) && position < pool->head->psize)
     errorf("attempt to access outside pool: %lu %s", position, pool->name);
 
@@ -1226,9 +1223,6 @@ pool_read (pool_t *pool, off_t position, void *ptr)
 void
 pool_write (pool_t *pool, off_t position, void *ptr)
 {
-  ensure(pool->head)
-    errorf("atempt to access closed pool");
-
   ensure(position >= sizeof(pool_header_t) && position < pool->head->psize)
     errorf("attempt to access outside pool: %lu %s", position, pool->name);
 
@@ -1239,9 +1233,6 @@ pool_write (pool_t *pool, off_t position, void *ptr)
 off_t
 pool_alloc (pool_t *pool)
 {
-  ensure(pool->head)
-    errorf("atempt to access closed pool");
-
   if (pool->head->pfree)
   {
     off_t position = pool->head->pfree;
@@ -1288,9 +1279,6 @@ pool_alloc (pool_t *pool)
 void
 pool_free (pool_t *pool, off_t position)
 {
-  ensure(pool->head)
-    errorf("atempt to access closed pool");
-
   ensure(position >= sizeof(pool_header_t) && position < pool->head->psize)
     errorf("attempt to access outside pool: %lu %s", position, pool->name);
 
@@ -1321,7 +1309,7 @@ pool_next (pool_t *pool, off_t position)
   while (position < pool->head->psize && pool_is_free(pool, position))
     position += pool->head->osize;
 
-  return (position < pool->head->psize) ? position: 0; 
+  return (position < pool->head->psize) ? position: 0;
 }
 
 #define pool_each(l,_val_) for ( \
@@ -1329,14 +1317,11 @@ pool_next (pool_t *pool, off_t position)
     !loop.l1 && (loop.pos = pool_next(loop.pool, loop.pos)) && (loop.l1 = 1); \
     loop.index++ \
   ) \
-    for (_val_ = pool_read(loop.pool, loop.pos, NULL); loop.l1; loop.l1 = !loop.l1) 
+    for (_val_ = pool_read(loop.pool, loop.pos, NULL); loop.l1; loop.l1 = !loop.l1)
 
 void*
 pool_read_chunk (pool_t *pool, off_t position, size_t bytes, void *ptr)
 {
-  ensure(pool->head)
-    errorf("atempt to access closed pool");
-
   ensure(position >= sizeof(pool_header_t) && position < pool->head->psize - bytes)
     errorf("attempt to access outside pool: %lu %s", position, pool->name);
 
@@ -1352,9 +1337,6 @@ pool_read_chunk (pool_t *pool, off_t position, size_t bytes, void *ptr)
 void
 pool_write_chunk (pool_t *pool, off_t position, size_t bytes, void *ptr)
 {
-  ensure(pool->head)
-    errorf("atempt to access closed pool");
-
   ensure(position >= sizeof(pool_header_t) && position < pool->head->psize - bytes)
     errorf("attempt to access outside pool: %lu %s", position, pool->name);
 
@@ -1375,7 +1357,7 @@ pool_alloc_chunk (pool_t *pool, size_t bytes)
     int found = 1;
     for (int i = 0; found && i < slots; i++)
       found = pool_is_free(pool, pos + (i * pool->head->osize));
-    
+
     if (found)
     {
       for (int i = 0; i < slots; i++)
