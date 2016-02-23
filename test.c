@@ -201,5 +201,11 @@ main (int argc, char *argv[])
 
   array_free(ar);
 
+  text_t *text = text_create("hello");
+  text_append(text, " world");
+  text_prepend(text, "I say, ");
+  printf("%s\n", text_get(text));
+  text_free(text);
+
   return EXIT_SUCCESS;
 }

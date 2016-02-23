@@ -18,6 +18,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <wchar.h>
 
 #define PRIME_1000 997
 #define PRIME_10000 9973
@@ -351,6 +352,245 @@ str_decode (char *s, char **e, int format)
   }
 done:
   return result;
+}
+
+typedef struct _text_t {
+  char *buffer;
+  size_t bytes;
+  off_t cursor;
+} text_t;
+
+static const char *text_nil = "";
+
+text_t*
+text_empty (text_t *text)
+{
+  if (text->buffer)
+    free(text->buffer);
+
+  text->buffer = NULL;
+  text->bytes  = 0;
+  text->cursor = 0;
+  return text;
+}
+
+void
+text_free (text_t *text)
+{
+  text_empty(text);
+  free(text);
+}
+
+text_t*
+text_set (text_t *text, const char *str)
+{
+  text_empty(text);
+
+  text->bytes = strlen(str) + 1;
+  text->buffer = allocate(text->bytes);
+  strcpy(text->buffer, str);
+
+  return text;
+}
+
+text_t*
+text_append (text_t *text, const char *str)
+{
+  if (!text->buffer)
+    text_set(text, str);
+
+  else
+  {
+    size_t new_bytes = strlen(str);
+    text->buffer = reallocate(text->buffer, text->bytes + new_bytes);
+    strcpy(text->buffer + text->bytes - 1, str);
+    text->bytes += new_bytes;
+  }
+  return text;
+}
+
+text_t*
+text_prepend (text_t *text, const char *str)
+{
+  if (!text->buffer)
+    text_set(text, str);
+
+  else
+  {
+    size_t new_bytes = strlen(str);
+    text->buffer = reallocate(text->buffer, text->bytes + new_bytes);
+    memmove(text->buffer + new_bytes, text->buffer, text->bytes);
+    memmove(text->buffer, str, new_bytes);
+    text->bytes += new_bytes;
+  }
+  return text;
+}
+
+const char*
+text_get (text_t *text)
+{
+  return text->buffer ? text->buffer: text_nil;
+}
+
+int
+text_compare (text_t *text, const char *str)
+{
+  return text->buffer ? strcmp(text->buffer, str): -1;
+}
+
+size_t
+text_length (text_t *text)
+{
+  return text->buffer ? text->bytes-1: 0;
+}
+
+size_t
+text_width (text_t *text)
+{
+  if (text->buffer)
+  {
+    size_t i = 0, j = 0;
+    char *s = text->buffer;
+    while (s[i])
+    {
+      if ((s[i] & 0xC0) != 0x80)
+        j++;
+      i++;
+    }
+    return j;
+  }
+  return 0;
+}
+
+size_t
+text_format (text_t *text, const char *pattern, ...)
+{
+  text_empty(text);
+
+  char *result = NULL;
+  va_list args;
+  char buffer[8];
+
+  va_start(args, pattern);
+  int len = vsnprintf(buffer, sizeof(buffer), pattern, args);
+  va_end(args);
+
+  if (len > -1 && (result = allocate(len+1)) && result)
+  {
+    va_start(args, pattern);
+    text->bytes = vsnprintf(result, len+1, pattern, args) + 1;
+    va_end(args);
+    text->buffer = result;
+  }
+
+  return max(0, text->bytes - 1);
+}
+
+size_t
+text_scan (text_t *text, str_cb_ischar cb)
+{
+  if (text->buffer)
+  {
+    size_t n = str_scan(text->buffer, cb);
+    text->cursor += n;
+    return n;
+  }
+  return 0;
+}
+
+size_t
+text_skip (text_t *text, str_cb_ischar cb)
+{
+  if (text->buffer)
+  {
+    size_t n = str_skip(text->buffer, cb);
+    text->cursor += n;
+    return n;
+  }
+  return 0;
+}
+
+size_t
+text_find (text_t *text, const char *str)
+{
+  if (text->buffer)
+  {
+    char *s = strstr(text->buffer + text->cursor, str);
+    if (s)
+    {
+      text->cursor = s - text->buffer;
+      return 1;
+    }
+  }
+  return 0;
+}
+
+size_t
+text_trim (text_t *text, str_cb_ischar cb)
+{
+  if (text->buffer)
+  {
+    str_trim(text->buffer, cb);
+    text->bytes = strlen(text->buffer) + 1;
+  }
+  return max(text->bytes-1, 0);
+}
+
+#define TEXT_HEX STR_ENCODE_HEX
+#define TEXT_SQL STR_ENCODE_SQL
+#define TEXT_DQUOTE STR_ENCODE_DQUOTE
+
+text_t*
+text_encode (text_t *text, int type)
+{
+  if (text->buffer)
+  {
+    char *result = str_encode(text->buffer, type);
+    text_empty(text);
+    text_set(text, result);
+  }
+  return text;
+}
+
+text_t*
+text_decode (text_t *text, int type)
+{
+  if (text->buffer)
+  {
+    char *result = str_decode(text->buffer, NULL, type);
+    text_empty(text);
+    text_set(text, result);
+  }
+  return text;
+}
+
+int
+text_match (text_t *text, regex_t *re)
+{
+  return text->buffer ? regmatch(re, text->buffer): 0;
+}
+
+text_t*
+text_init (text_t *text)
+{
+  text->buffer = NULL;
+  text->bytes = 0;
+  return text;
+}
+
+text_t*
+text_create (const char *str)
+{
+  text_t *text = allocate(sizeof(text_t));
+  text_init(text);
+  if (str) text_set(text, str);
+  return text;
+}
+
+text_t*
+text_copy (text_t *text)
+{
+  return text_create(text_get(text));
 }
 
 struct _array_t;
