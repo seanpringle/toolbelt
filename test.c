@@ -192,5 +192,14 @@ main (int argc, char *argv[])
 
   vector_free(v);
 
+  array_t *ar = array_create(10);
+  array_set(ar, 0, "hello");
+  array_set(ar, 1, "world");
+
+  array_each(ar, char *s)
+    printf("%lu => %s\n", loop.index, s ? s: "(empty)");
+
+  array_free(ar);
+
   return EXIT_SUCCESS;
 }

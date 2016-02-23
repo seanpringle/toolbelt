@@ -371,7 +371,7 @@ typedef struct _array_t {
     for (_val_ = loop.array->items[loop.index]; loop.l1; loop.l1 = !loop.l1)
 
 void
-array_empty_free_vals (array_t *array)`
+array_empty_free_vals (array_t *array)
 {
   array_each(array, void *ptr) free(ptr);
 }
@@ -389,6 +389,7 @@ void
 array_init_items (array_t *array)
 {
   array->items = allocate(sizeof(void*) * array->width);
+  memset(array->items, 0, sizeof(void*) * array->width);
 }
 
 array_t*
@@ -424,7 +425,7 @@ array_get (array_t *array, off_t pos)
 {
   if (!array->items) return NULL;
 
-  ensure(pos >= 0 && pos < array->count)
+  ensure(pos >= 0 && pos < array->width)
     errorf("array_del bounds: %lu", pos);
 
   return array->items[pos];
@@ -436,7 +437,7 @@ array_set (array_t *array, off_t pos, void *ptr)
   if (!array->items)
     array_init_items(array);
 
-  ensure(pos >= 0 && pos < array->count)
+  ensure(pos >= 0 && pos < array->width)
     errorf("array_del bounds: %lu", pos);
 
   array->items[pos] = ptr;
