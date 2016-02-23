@@ -594,7 +594,11 @@ typedef struct _list_t {
   list_callback empty;
 } list_t;
 
-list_node_t* list_next(list_t*, list_node_t*);
+list_node_t*
+list_next (list_t *list, list_node_t *node)
+{
+  return node ? node->next: list->nodes;
+}
 
 #define list_each(l,_val_) for ( \
   struct { off_t index; list_t *list; list_node_t *node; int l1; } loop = { 0, (l), NULL, 0 }; \
@@ -665,18 +669,6 @@ list_get (list_t *list, off_t position)
   list_each(list, void *val)
     if (loop.index == position)
       return val;
-  return NULL;
-}
-
-list_node_t*
-list_next (list_t *list, list_node_t *node)
-{
-  if (!node)
-    return list->nodes;
-
-  if (node)
-    return node->next;
-
   return NULL;
 }
 
@@ -794,7 +786,30 @@ typedef struct _map_t {
   size_t depth;
 } map_t;
 
-map_node_t* map_next(map_t*, map_node_t*);
+map_node_t*
+map_next (map_t *map, map_node_t *node)
+{
+  if (!map->chains)
+    return NULL;
+
+  if (!node)
+  {
+    for (int i = 0; i < map->width; i++)
+      if (map->chains[i].count) return vector_get(&map->chains[i], 0);
+    return NULL;
+  }
+
+  int chain = node->hash % map->width;
+  vector_t *vector = &map->chains[chain];
+
+  vector_each(vector, map_node_t *n)
+    if (n == node && loop.index < vector->count-1)
+      return vector_get(vector, loop.index+1);
+
+  for (int i = chain+1; i < map->width; i++)
+    if (map->chains[i].count) return vector_get(&map->chains[i], 0);
+  return NULL;
+}
 
 #define map_each(l,_key_,_val_) for ( \
   struct { off_t index; map_t *map; map_node_t *node; int l1; int l2; } loop = { 0, (l), NULL, 0, 0 }; \
@@ -893,9 +908,17 @@ map_set (map_t *map, void *key, void *val)
 
   vector_t *vector = &map->chains[chain];
 
+  off_t pos = 0;
   vector_each(vector, map_node_t *node)
   {
-    if (!map->compare(node->key, key))
+    int cmp = map->compare(node->key, key);
+    if (cmp < 0)
+      pos = loop.index+1;
+    else
+    if (cmp > 0)
+      break;
+    else
+    if (cmp == 0)
     {
       node->key = key;
       node->val = val;
@@ -908,7 +931,7 @@ map_set (map_t *map, void *key, void *val)
   node->val = val;
   node->hash = hv;
 
-  vector_push(vector, node);
+  vector_ins(vector, pos, node);
   map->count++;
 
   if (map->count > map->width * map->depth)
@@ -934,9 +957,11 @@ map_find (map_t *map, void *key)
   vector_t *vector = &map->chains[chain];
 
   vector_each(vector, map_node_t *node)
-    if (!map->compare(node->key, key))
-      return node;
-
+  {
+    int cmp = map->compare(node->key, key);
+    if (cmp == 0) return node;
+    if (cmp  > 0) break;
+  }
   return NULL;
 }
 
@@ -964,7 +989,10 @@ map_del (map_t *map, void *key)
 
   vector_each(vector, map_node_t *node)
   {
-    if (!map->compare(node->key, key))
+    int cmp = map->compare(node->key, key);
+    if (cmp  > 0) break;
+
+    if (cmp == 0)
     {
       void *ptr = node->val;
       vector_del(vector, loop.index);
@@ -972,31 +1000,6 @@ map_del (map_t *map, void *key)
       return ptr;
     }
   }
-  return NULL;
-}
-
-map_node_t*
-map_next (map_t *map, map_node_t *node)
-{
-  if (!map->chains)
-    return NULL;
-
-  if (!node)
-  {
-    for (int i = 0; i < map->width; i++)
-      if (map->chains[i].count) return vector_get(&map->chains[i], 0);
-    return NULL;
-  }
-
-  int chain = node->hash % map->width;
-  vector_t *vector = &map->chains[chain];
-
-  vector_each(vector, map_node_t *n)
-    if (n == node && loop.index < vector->count-1)
-      return vector_get(vector, loop.index+1);
-
-  for (int i = chain+1; i < map->width; i++)
-    if (map->chains[i].count) return vector_get(&map->chains[i], 0);
   return NULL;
 }
 
