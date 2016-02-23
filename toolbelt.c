@@ -353,6 +353,95 @@ done:
   return result;
 }
 
+struct _array_t;
+typedef void (*array_callback)(struct _array_t*);
+
+typedef struct _array_t {
+  void **items;
+  size_t count;
+  size_t width;
+  array_callback empty;
+} array_t;
+
+#define array_each(l,_val_) for ( \
+  struct { off_t index; array_t *array; int l1; } loop = { 0, (l), 0 }; \
+    loop.index < loop.array->width && !loop.l1 && (loop.l1 = 1); \
+    loop.index++ \
+  ) \
+    for (_val_ = loop.array->items[loop.index]; loop.l1; loop.l1 = !loop.l1)
+
+void
+array_empty_free_vals (array_t *array)`
+{
+  array_each(array, void *ptr) free(ptr);
+}
+
+void
+array_init (array_t *array, size_t width)
+{
+  array->items = NULL;
+  array->count = 0;
+  array->width = width;
+  array->empty = NULL;
+}
+
+void
+array_init_items (array_t *array)
+{
+  array->items = allocate(sizeof(void*) * array->width);
+}
+
+array_t*
+array_create (size_t width)
+{
+  array_t *array = allocate(sizeof(array_t));
+  array_init(array, width);
+  return array;
+}
+
+void
+array_empty (array_t *array)
+{
+  if (array->items)
+  {
+    if (array->empty)
+      array->empty(array);
+    free(array->items);
+    array->items = NULL;
+    array->count = 0;
+  }
+}
+
+void
+array_free (array_t *array)
+{
+  array_empty(array);
+  free(array);
+}
+
+void*
+array_get (array_t *array, off_t pos)
+{
+  if (!array->items) return NULL;
+
+  ensure(pos >= 0 && pos < array->count)
+    errorf("array_del bounds: %lu", pos);
+
+  return array->items[pos];
+}
+
+void
+array_set (array_t *array, off_t pos, void *ptr)
+{
+  if (!array->items)
+    array_init_items(array);
+
+  ensure(pos >= 0 && pos < array->count)
+    errorf("array_del bounds: %lu", pos);
+
+  array->items[pos] = ptr;
+}
+
 struct _vector_t;
 typedef void (*vector_callback)(struct _vector_t*);
 
@@ -378,7 +467,16 @@ vector_empty_free_vals (vector_t *vector)
 void
 vector_init (vector_t *vector)
 {
-  memset(vector, 0, sizeof(vector_t));
+  vector->items = NULL;
+  vector->count = 0;
+  vector->empty = NULL;
+}
+
+void
+vector_init_items (vector_t *vector)
+{
+  vector->items = allocate(sizeof(void*));
+  vector->items[0] = NULL;
 }
 
 vector_t*
@@ -392,11 +490,14 @@ vector_create ()
 void
 vector_empty (vector_t *vector)
 {
-  if (vector->empty)
-    vector->empty(vector);
-  free(vector->items);
-  vector->items = NULL;
-  vector->count = 0;
+  if (vector->items)
+  {
+    if (vector->empty)
+      vector->empty(vector);
+    free(vector->items);
+    vector->items = NULL;
+    vector->count = 0;
+  }
 }
 
 void
@@ -412,6 +513,9 @@ vector_ins (vector_t *vector, off_t pos, void *ptr)
   ensure(pos >= 0 && pos <= vector->count)
     errorf("vector_ins bounds: %lu", pos);
 
+  if (!vector->items)
+    vector_init_items(vector);
+
   vector->items = vector->items ? reallocate(vector->items, sizeof(void*) * (vector->count + 1)): allocate(sizeof(void*));
   memmove(&vector->items[pos+1], &vector->items[pos], (vector->count - pos) * sizeof(void*));
   vector->items[pos] = ptr;
@@ -421,7 +525,7 @@ vector_ins (vector_t *vector, off_t pos, void *ptr)
 void*
 vector_del (vector_t *vector, off_t pos)
 {
-  ensure(pos >= 0 && pos < vector->count)
+  ensure(vector->items && pos >= 0 && pos < vector->count)
     errorf("vector_del bounds: %lu", pos);
 
   void *ptr = vector->items[pos];
@@ -433,7 +537,7 @@ vector_del (vector_t *vector, off_t pos)
 void*
 vector_get (vector_t *vector, off_t pos)
 {
-  ensure(pos >= 0 && pos < vector->count)
+  ensure(vector->items && pos >= 0 && pos < vector->count)
     errorf("vector_del bounds: %lu", pos);
 
   return vector->items[pos];
@@ -444,6 +548,9 @@ vector_set (vector_t *vector, off_t pos, void *ptr)
 {
   ensure(pos >= 0 && pos < vector->count)
     errorf("vector_del bounds: %lu", pos);
+
+  if (!vector->items)
+    vector_init_items(vector);
 
   vector->items[pos] = ptr;
 }
