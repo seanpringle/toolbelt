@@ -104,7 +104,7 @@ mprintf (char *pattern, ...)
 }
 
 #define str_each(l,_val_) for ( \
-  struct { int index; char *subject; int l1; } loop = { 0, (l), 0 }; \
+  struct { off_t index; char *subject; int l1; } loop = { 0, (l), 0 }; \
     !loop.l1 && loop.subject[loop.index] && (loop.l1 = 1); \
     loop.index++ \
   ) \
@@ -353,6 +353,125 @@ done:
   return result;
 }
 
+struct _vector_t;
+typedef void (*vector_callback)(struct _vector_t*);
+
+typedef struct _vector_t {
+  void **items;
+  size_t count;
+  vector_callback empty;
+} vector_t;
+
+#define vector_each(l,_val_) for ( \
+  struct { off_t index; vector_t *vector; int l1; } loop = { 0, (l), 0 }; \
+    loop.index < loop.vector->count && !loop.l1 && (loop.l1 = 1); \
+    loop.index++ \
+  ) \
+    for (_val_ = loop.vector->items[loop.index]; loop.l1; loop.l1 = !loop.l1)
+
+void
+vector_empty_free_vals (vector_t *vector)
+{
+  vector_each(vector, void *ptr) free(ptr);
+}
+
+void
+vector_init (vector_t *vector)
+{
+  memset(vector, 0, sizeof(vector_t));
+}
+
+vector_t*
+vector_create ()
+{
+  vector_t *vector = allocate(sizeof(vector_t));
+  vector_init(vector);
+  return vector;
+}
+
+void
+vector_empty (vector_t *vector)
+{
+  if (vector->empty)
+    vector->empty(vector);
+  free(vector->items);
+  vector->items = NULL;
+  vector->count = 0;
+}
+
+void
+vector_free (vector_t *vector)
+{
+  vector_empty(vector);
+  free(vector);
+}
+
+void
+vector_ins (vector_t *vector, off_t pos, void *ptr)
+{
+  ensure(pos >= 0 && pos <= vector->count)
+    errorf("vector_ins bounds: %lu", pos);
+
+  vector->items = vector->items ? reallocate(vector->items, sizeof(void*) * (vector->count + 1)): allocate(sizeof(void*));
+  memmove(&vector->items[pos+1], &vector->items[pos], (vector->count - pos) * sizeof(void*));
+  vector->items[pos] = ptr;
+  vector->count++;
+}
+
+void*
+vector_del (vector_t *vector, off_t pos)
+{
+  ensure(pos >= 0 && pos < vector->count)
+    errorf("vector_del bounds: %lu", pos);
+
+  void *ptr = vector->items[pos];
+  memmove(&vector->items[pos], &vector->items[pos+1], (vector->count - pos - 1) * sizeof(void*));
+  vector->count--;
+  return ptr;
+}
+
+void*
+vector_get (vector_t *vector, off_t pos)
+{
+  ensure(pos >= 0 && pos < vector->count)
+    errorf("vector_del bounds: %lu", pos);
+
+  return vector->items[pos];
+}
+
+void
+vector_set (vector_t *vector, off_t pos, void *ptr)
+{
+  ensure(pos >= 0 && pos < vector->count)
+    errorf("vector_del bounds: %lu", pos);
+
+  vector->items[pos] = ptr;
+}
+
+void
+vector_push (vector_t *vector, void *ptr)
+{
+  vector_ins(vector, vector->count, ptr);
+}
+
+void*
+vector_pop (vector_t *vector)
+{
+  return vector_del(vector, vector->count-1);
+}
+
+void
+vector_shove (vector_t *vector, void *ptr)
+{
+  vector_ins(vector, 0, ptr);
+}
+
+void*
+vector_shift (vector_t *vector)
+{
+  return vector_del(vector, 0);
+}
+
 struct _list_t;
 typedef void (*list_callback)(struct _list_t*);
 
@@ -370,7 +489,7 @@ typedef struct _list_t {
 list_node_t* list_next(list_t*, list_node_t*);
 
 #define list_each(l,_val_) for ( \
-  struct { int index; list_t *list; list_node_t *node; int l1; } loop = { 0, (l), NULL, 0 }; \
+  struct { off_t index; list_t *list; list_node_t *node; int l1; } loop = { 0, (l), NULL, 0 }; \
     !loop.l1 && (loop.node = list_next(loop.list, loop.node)) && (loop.l1 = 1); \
     loop.index++ \
   ) \
@@ -545,261 +664,289 @@ list_empty_free (list_t *list)
   list_each(list, void *val) free(val);
 }
 
-struct _dict_t;
-typedef void (*dict_callback)(struct _dict_t*);
+struct _map_t;
+typedef void (*map_callback)(struct _map_t*);
 
-typedef int (*dict_callback_cmp)(void*, void*);
-typedef uint32_t (*dict_callback_hash)(void*);
+typedef int (*map_callback_cmp)(void*, void*);
+typedef uint32_t (*map_callback_hash)(void*);
 
-typedef struct _dict_node_t {
+typedef struct _map_node_t {
   void *key;
   void *val;
   uint32_t hash;
-  struct _dict_node_t *next;
-} dict_node_t;
+} map_node_t;
 
-typedef struct _dict_t {
-  dict_node_t **chains;
-  dict_callback_hash hash;
-  dict_callback_cmp compare;
-  dict_callback empty;
+typedef struct _map_t {
+  vector_t *chains;
+  map_callback_hash hash;
+  map_callback_cmp compare;
+  map_callback empty;
   size_t count;
   size_t width;
   size_t depth;
-} dict_t;
+} map_t;
 
-dict_node_t* dict_next(dict_t*, dict_node_t*);
+map_node_t* map_next(map_t*, map_node_t*);
 
-#define dict_each(l,_key_,_val_) for ( \
-  struct { int index; dict_t *dict; dict_node_t *node; int l1; int l2; } loop = { 0, (l), NULL, 0, 0 }; \
-    !loop.l1 && !loop.l2 && (loop.node = dict_next(loop.dict, loop.node)) && (loop.l1 = 1) && (loop.l2 = 1); \
+#define map_each(l,_key_,_val_) for ( \
+  struct { off_t index; map_t *map; map_node_t *node; int l1; int l2; } loop = { 0, (l), NULL, 0, 0 }; \
+    !loop.l1 && !loop.l2 && (loop.node = map_next(loop.map, loop.node)) && (loop.l1 = 1) && (loop.l2 = 1); \
     loop.index++ \
   ) \
     for (_key_ = loop.node->key; loop.l1; loop.l1 = !loop.l1) \
       for (_val_ = loop.node->val; loop.l2; loop.l2 = !loop.l2)
 
-#define dict_each_key(l,_key_) for ( \
-  struct { int index; dict_t *dict; dict_node_t *node; int l1; } loop = { 0, (l), NULL, 0 }; \
-    !loop.l1 && (loop.node = dict_next(loop.dict, loop.node)) && (loop.l1 = 1); \
+#define map_each_key(l,_key_) for ( \
+  struct { off_t index; map_t *map; map_node_t *node; int l1; } loop = { 0, (l), NULL, 0 }; \
+    !loop.l1 && (loop.node = map_next(loop.map, loop.node)) && (loop.l1 = 1); \
     loop.index++ \
   ) \
     for (_key_ = loop.node->key; loop.l1; loop.l1 = !loop.l1)
 
-#define dict_each_val(l,_val_) for ( \
-  struct { int index; dict_t *dict; dict_node_t *node; int l1; } loop = { 0, (l), NULL, 0 }; \
-    !loop.l1 && (loop.node = dict_next(loop.dict, loop.node)) && (loop.l1 = 1); \
+#define map_each_val(l,_val_) for ( \
+  struct { off_t index; map_t *map; map_node_t *node; int l1; } loop = { 0, (l), NULL, 0 }; \
+    !loop.l1 && (loop.node = map_next(loop.map, loop.node)) && (loop.l1 = 1); \
     loop.index++ \
   ) \
     for (_val_ = loop.node->val; loop.l1; loop.l1 = !loop.l1)
 
 uint32_t
-dict_str_hash (void *a)
+map_str_hash (void *a)
 {
   return djb_hash((char*)a);
 }
 
 int
-dict_str_compare (void *a, void *b)
+map_str_compare (void *a, void *b)
 {
   return strcmp((char*)a, (char*)b);
 }
 
 void
-dict_init (dict_t *dict, size_t width)
+map_init (map_t *map, size_t width)
 {
-  memset(dict, 0, sizeof(dict_t));
-  dict->width = width;
-  dict->depth = 5;
-
-  size_t bytes = sizeof(dict_node_t*) * dict->width;
-  dict->chains = allocate(bytes);
-  memset(dict->chains, 0, bytes);
+  map->chains  = NULL;
+  map->hash    = NULL;
+  map->compare = NULL;
+  map->empty   = NULL;
+  map->count   = 0;
+  map->width   = width;
+  map->depth   = 5;
 }
 
 void
-dict_resize (dict_t *dict, size_t width)
+map_init_chains (map_t *map)
 {
-  dict_t tmp;
-  dict_init(&tmp, width);
-  tmp.hash = dict->hash;
-  tmp.compare = dict->compare;
+  size_t bytes = sizeof(vector_t) * map->width;
+  map->chains = allocate(bytes);
+  memset(map->chains, 0, bytes);
 
-  for (off_t i = 0; i < dict->width; i++)
+  for (off_t i = 0; i < map->width; i++)
   {
-    while (dict->chains[i])
-    {
-      dict_node_t *node = dict->chains[i];
-      dict->chains[i] = node->next;
-
-      node->hash = tmp.hash(node->key);
-      int chain = node->hash % tmp.width;
-      node->next = tmp.chains[chain];
-      tmp.chains[chain] = node;
-    }
+    vector_init(&map->chains[i]);
+    map->chains[i].empty = vector_empty_free_vals;
   }
-  free(dict->chains);
-  dict->chains = tmp.chains;
-  dict->width  = tmp.width;
+}
+
+void
+map_resize (map_t *map, size_t width)
+{
+  map_t tmp;
+
+  map_init(&tmp, width);
+  map_init_chains(&tmp);
+
+  tmp.hash = map->hash;
+  tmp.compare = map->compare;
+
+  for (off_t i = 0; i < map->width; i++)
+  {
+    vector_each(&map->chains[i], map_node_t *node)
+    {
+      int chain = node->hash % tmp.width;
+      vector_push(&tmp.chains[chain], node);
+    }
+    map->chains[i].empty = NULL;
+    vector_empty(&map->chains[i]);
+  }
+  free(map->chains);
+  map->chains = tmp.chains;
+  map->width  = tmp.width;
 }
 
 int
-dict_set (dict_t *dict, void *key, void *val)
+map_set (map_t *map, void *key, void *val)
 {
-  int rc = 1;
-  uint32_t hv = dict->hash(key);
-  int chain = hv % dict->width;
+  if (!map->chains)
+    map_init_chains(map);
 
-  dict_node_t *node = dict->chains[chain];
-  while (node && dict->compare(node->key, key))
-    node = node->next;
+  uint32_t hv = map->hash(key);
+  int chain = hv % map->width;
 
-  if (!node)
+  vector_t *vector = &map->chains[chain];
+
+  vector_each(vector, map_node_t *node)
   {
-    node = allocate(sizeof(dict_node_t));
-    node->hash = hv;
-    node->next = dict->chains[chain];
-    dict->chains[chain] = node;
-    dict->count++;
-    rc = 2;
+    if (!map->compare(node->key, key))
+    {
+      node->key = key;
+      node->val = val;
+      return 2;
+    }
   }
+
+  map_node_t *node = allocate(sizeof(map_node_t));
   node->key = key;
   node->val = val;
+  node->hash = hv;
 
-  if (dict->count > dict->width * dict->depth)
+  vector_push(vector, node);
+  map->count++;
+
+  if (map->count > map->width * map->depth)
   {
-    if (dict->width == PRIME_1000)
-      dict_resize(dict, PRIME_10000);
+    if (map->width == PRIME_1000)
+      map_resize(map, PRIME_10000);
     else
-    if (dict->width == PRIME_10000)
-      dict_resize(dict, PRIME_100000);
+    if (map->width == PRIME_10000)
+      map_resize(map, PRIME_100000);
     else
-    if (dict->width == PRIME_100000)
-      dict_resize(dict, PRIME_1000000);
+    if (map->width == PRIME_100000)
+      map_resize(map, PRIME_1000000);
   }
-  return rc;
+  return 1;
 }
 
-dict_node_t*
-dict_find (dict_t *dict, void *key)
+map_node_t*
+map_find (map_t *map, void *key)
 {
-  int chain = dict->hash(key) % dict->width;
+  if (!map->chains) return NULL;
 
-  dict_node_t *node = dict->chains[chain];
-  while (node && dict->compare(node->key, key))
-    node = node->next;
+  int chain = map->hash(key) % map->width;
+  vector_t *vector = &map->chains[chain];
 
-  return node;
+  vector_each(vector, map_node_t *node)
+    if (!map->compare(node->key, key))
+      return node;
+
+  return NULL;
 }
 
 void*
-dict_get (dict_t *dict, void *key)
+map_get (map_t *map, void *key)
 {
-  dict_node_t *node = dict_find(dict, key);
+  map_node_t *node = map_find(map, key);
   return node ? node->val: NULL;
 }
 
 int
-dict_has (dict_t *dict, void *key)
+map_has (map_t *map, void *key)
 {
-  dict_node_t *node = dict_find(dict, key);
+  map_node_t *node = map_find(map, key);
   return node ? 1:0;
 }
 
 void*
-dict_del (dict_t *dict, void *key)
+map_del (map_t *map, void *key)
 {
-  int chain = dict->hash(key) % dict->width;
+  if (!map->chains) return NULL;
 
-  dict_node_t **prev = &dict->chains[chain];
-  while (*prev && dict->compare((*prev)->key, key))
-    prev = &((*prev)->next);
+  int chain = map->hash(key) % map->width;
+  vector_t *vector = &map->chains[chain];
 
-  if (*prev)
+  vector_each(vector, map_node_t *node)
   {
-    dict_node_t *node = *prev;
-    *prev = node->next;
-    void *val = node->val;
-    free(node);
-    dict->count--;
-    return val;
+    if (!map->compare(node->key, key))
+    {
+      void *ptr = node->val;
+      vector_del(vector, loop.index);
+      map->count--;
+      return ptr;
+    }
   }
   return NULL;
 }
 
-dict_node_t*
-dict_next (dict_t *dict, dict_node_t *node)
+map_node_t*
+map_next (map_t *map, map_node_t *node)
 {
+  if (!map->chains)
+    return NULL;
+
   if (!node)
   {
-    for (int i = 0; i < dict->width; i++)
-      if (dict->chains[i]) return dict->chains[i];
+    for (int i = 0; i < map->width; i++)
+      if (map->chains[i].count) return vector_get(&map->chains[i], 0);
     return NULL;
   }
 
-  if (node->next)
-    return node->next;
+  int chain = node->hash % map->width;
+  vector_t *vector = &map->chains[chain];
 
-  for (int i = (node->hash % dict->width)+1; i < dict->width; i++)
-    if (dict->chains[i]) return dict->chains[i];
+  vector_each(vector, map_node_t *n)
+    if (n == node && loop.index < vector->count-1)
+      return vector_get(vector, loop.index+1);
+
+  for (int i = chain+1; i < map->width; i++)
+    if (map->chains[i].count) return vector_get(&map->chains[i], 0);
   return NULL;
 }
 
-dict_t*
-dict_create ()
+map_t*
+map_create ()
 {
-  dict_t *dict = allocate(sizeof(dict_t));
-  dict_init(dict, PRIME_1000);
-  dict->compare = dict_str_compare;
-  dict->hash = dict_str_hash;
-  return dict;
+  map_t *map = allocate(sizeof(map_t));
+  map_init(map, PRIME_1000);
+  map->compare = map_str_compare;
+  map->hash = map_str_hash;
+  return map;
 }
 
 void
-dict_empty (dict_t *dict)
+map_empty (map_t *map)
 {
-  if (dict->empty) dict->empty(dict);
-  for (int i = 0; i < dict->width; i++)
+  if (map->chains)
   {
-    while (dict->chains[i])
-    {
-      dict_node_t *node = dict->chains[i];
-      dict->chains[i] = node->next;
-      free(node);
-    }
+    if (map->empty)
+      map->empty(map);
+
+    for (int i = 0; i < map->width; i++)
+      vector_empty(&map->chains[i]);
+
+    free(map->chains);
+    map->count = 0;
   }
-  dict->count = 0;
 }
 
 void
-dict_free (dict_t *dict)
+map_free (map_t *map)
 {
-  dict_empty(dict);
-  free(dict->chains);
-  free(dict);
+  map_empty(map);
+  free(map);
 }
 
 size_t
-dict_count (dict_t *dict)
+map_count (map_t *map)
 {
-  return dict->count;
+  return map->count;
 }
 
 void
-dict_empty_free (dict_t *dict)
+map_empty_free (map_t *map)
 {
-  dict_each(dict, void *key, void *val) { free(key); free(val); }
+  map_each(map, void *key, void *val) { free(key); free(val); }
 }
 
 void
-dict_empty_free_keys (dict_t *dict)
+map_empty_free_keys (map_t *map)
 {
-  dict_each_key(dict, void *key) free(key);
+  map_each_key(map, void *key) free(key);
 }
 
 void
-dict_empty_free_vals (dict_t *dict)
+map_empty_free_vals (map_t *map)
 {
-  dict_each_val(dict, void *val) free(val);
+  map_each_val(map, void *val) free(val);
 }
 
 #define JSON_OBJECT 1
@@ -1313,7 +1460,7 @@ pool_next (pool_t *pool, off_t position)
 }
 
 #define pool_each(l,_val_) for ( \
-  struct { int index; pool_t *pool; off_t pos; int l1; } loop = { 0, (l), 0, 0 }; \
+  struct { off_t index; pool_t *pool; off_t pos; int l1; } loop = { 0, (l), 0, 0 }; \
     !loop.l1 && (loop.pos = pool_next(loop.pool, loop.pos)) && (loop.l1 = 1); \
     loop.index++ \
   ) \

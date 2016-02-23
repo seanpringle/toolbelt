@@ -1,7 +1,7 @@
 #include "toolbelt.c"
 
 int
-dict_cmp_int (void *a, void *b)
+map_cmp_int (void *a, void *b)
 {
   int ai = *((int*)a);
   int bi = *((int*)b);
@@ -11,7 +11,7 @@ dict_cmp_int (void *a, void *b)
 }
 
 uint32_t
-dict_hash_int (void *a)
+map_hash_int (void *a)
 {
   int ai = *((int*)a);
   return ai;
@@ -67,56 +67,56 @@ main (int argc, char *argv[])
 
   list_free(list);
 
-  dict_t *dict = dict_create();
-  ensure(dict) errorf("dict_create");
+  map_t *map = map_create();
+  ensure(map) errorf("map_create");
 
-  dict_set(dict, "hello", "world");
-  dict_set(dict, "alpha", "beta");
-  dict_set(dict, "fu", "bar");
+  map_set(map, "hello", "world");
+  map_set(map, "alpha", "beta");
+  map_set(map, "fu", "bar");
 
   int dn = 0;
-  dict_each(dict, char *key, char *val)
+  map_each(map, char *key, char *val)
   {
     dn += strlen(key);
     dn += strlen(val);
   }
   ensure(dn == 24)
-    errorf("dict_each");
+    errorf("map_each");
 
-  ensure((item = dict_get(dict, "hello")) && !strcmp(item, "world"))
-    errorf("dict_get 1");
+  ensure((item = map_get(map, "hello")) && !strcmp(item, "world"))
+    errorf("map_get 1");
 
-  dict_free(dict);
+  map_free(map);
 
-  dict = dict_create(dict_hash_int, dict_cmp_int);
+  map = map_create(map_hash_int, map_cmp_int);
 
   int i1 = 1;
   int i2 = 2;
   int i3 = 3;
   int i4 = 4;
 
-  dict_set(dict, &i1, &i2);
-  dict_set(dict, &i3, &i4);
+  map_set(map, &i1, &i2);
+  map_set(map, &i3, &i4);
 
-  ensure(dict_get(dict, &i1) == &i2)
-    errorf("dict_get 2");
+  ensure(map_get(map, &i1) == &i2)
+    errorf("map_get 2");
 
-  ensure(dict_get(dict, &i4) == NULL)
-    errorf("dict_get 3");
+  ensure(map_get(map, &i4) == NULL)
+    errorf("map_get 3");
 
-  dict_free(dict);
+  map_free(map);
 
-  dict = dict_create();
-  dict->empty = dict_empty_free;
+  map = map_create();
+  map->empty = map_empty_free;
 
   for (int i = 0; i < 10000; i++)
   {
     char tmp[32];
     sprintf(tmp, "%d", i);
-    dict_set(dict, strdup(tmp), strdup(tmp));
+    map_set(map, strdup(tmp), strdup(tmp));
   }
 
-  dict_free(dict);
+  map_free(map);
 
   ensure(str_skip("hello", isspace) == 0)
     errorf("str_skip");
@@ -180,6 +180,17 @@ main (int argc, char *argv[])
   strcpy(pool_read_chunk(&pool, pool_alloc_chunk(&pool, 2), 2, NULL), "A");
 
   pool_close(&pool);
+
+  vector_t *v = vector_create();
+  vector_push(v, "hello");
+  vector_push(v, "world");
+  vector_del(v, 0);
+  vector_push(v, "hello");
+
+  vector_each(v, char *s)
+    printf("%lu => %s\n", loop.index, s);
+
+  vector_free(v);
 
   return EXIT_SUCCESS;
 }
