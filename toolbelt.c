@@ -393,43 +393,51 @@ text_set (text_t *text, const char *str)
   return text;
 }
 
-text_t*
-text_append (text_t *text, const char *str)
+size_t
+text_format (text_t *text, const char *pattern, ...)
 {
-  if (!text->buffer)
-    text_set(text, str);
+  size_t bytes = 0;
+  char *result = NULL;
 
-  else
+  va_list args;
+  char buffer[8];
+
+  va_start(args, pattern);
+  int len = vsnprintf(buffer, sizeof(buffer), pattern, args);
+  va_end(args);
+
+  if (len > -1 && (result = allocate(len+1)) && result)
   {
-    size_t new_bytes = strlen(str);
-    text->buffer = reallocate(text->buffer, text->bytes + new_bytes);
-    strcpy(text->buffer + text->bytes - 1, str);
-    text->bytes += new_bytes;
-  }
-  return text;
-}
+    va_start(args, pattern);
+    bytes = vsnprintf(result, len+1, pattern, args) + 1;
+    va_end(args);
 
-text_t*
-text_prepend (text_t *text, const char *str)
-{
-  if (!text->buffer)
-    text_set(text, str);
-
-  else
-  {
-    size_t new_bytes = strlen(str);
-    text->buffer = reallocate(text->buffer, text->bytes + new_bytes);
-    memmove(text->buffer + new_bytes, text->buffer, text->bytes);
-    memmove(text->buffer, str, new_bytes);
-    text->bytes += new_bytes;
+    text_empty(text);
+    text->bytes = bytes + 1;
+    text->buffer = result;
+    return bytes;
   }
-  return text;
+
+  text_empty(text);
+  return 0;
 }
 
 const char*
 text_get (text_t *text)
 {
   return text->buffer ? text->buffer: text_nil;
+}
+
+void
+text_append (text_t *text, const char *str)
+{
+  text_format(text, "%s%s", text_get(text), str);
+}
+
+void
+text_prepend (text_t *text, const char *str)
+{
+  text_format(text, "%s%s", str, text_get(text));
 }
 
 int
@@ -460,30 +468,6 @@ text_width (text_t *text)
     return j;
   }
   return 0;
-}
-
-size_t
-text_format (text_t *text, const char *pattern, ...)
-{
-  text_empty(text);
-
-  char *result = NULL;
-  va_list args;
-  char buffer[8];
-
-  va_start(args, pattern);
-  int len = vsnprintf(buffer, sizeof(buffer), pattern, args);
-  va_end(args);
-
-  if (len > -1 && (result = allocate(len+1)) && result)
-  {
-    va_start(args, pattern);
-    text->bytes = vsnprintf(result, len+1, pattern, args) + 1;
-    va_end(args);
-    text->buffer = result;
-  }
-
-  return max(0, text->bytes - 1);
 }
 
 size_t
