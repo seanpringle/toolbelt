@@ -104,7 +104,7 @@ main (int argc, char *argv[])
   map_free(map);
 
   map = map_create();
-  map->empty = map_empty_free;
+  map->clear = map_clear_free;
 
   for (int i = 0; i < 10000; i++)
   {
@@ -191,7 +191,7 @@ main (int argc, char *argv[])
   array_set(ar, 1, "world");
 
   array_each(ar, char *s)
-    printf("%lu => %s\n", loop.index, s ? s: "(empty)");
+    printf("%lu => %s\n", loop.index, s ? s: "(clear)");
 
   array_free(ar);
 
@@ -214,6 +214,11 @@ main (int argc, char *argv[])
   text_free(text2);
   text_free(text3);
   text_free(text4);
+
+  file_t *file = file_open("fubar", FILE_CREATE);
+  file_write(file, "fu\n", 3);
+  file_write(file, "bar\n", 4);
+  file_close(file);
 
   return EXIT_SUCCESS;
 }

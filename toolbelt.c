@@ -154,7 +154,7 @@ int issquote (int c) { return c == '\''; }
 int isname (int c) { return isalnum(c) || c == '_'; }
 
 char*
-str_copy (char *s, size_t length)
+str_copy (const char *s, size_t length)
 {
   char *a = allocate(length+1);
   memmove(a, s, length);
@@ -323,7 +323,7 @@ typedef struct _text_t {
 
 static const char *text_nil = "";
 
-text_t*
+void
 text_clear (text_t *text)
 {
   if (text->buffer)
@@ -332,7 +332,6 @@ text_clear (text_t *text)
   text->buffer = NULL;
   text->bytes  = 0;
   text->cursor = 0;
-  return text;
 }
 
 void
@@ -604,6 +603,98 @@ void text_home (text_t *text) { text_at(text, 0); }
 off_t text_end (text_t *text) { text_at(text, text_count(text)); return text->cursor; }
 
 #define textf(...) ({ text_t *t = text_create(NULL); text_format(t, __VA_ARGS__); t; })
+
+#define FILE_READ (1<<0)
+#define FILE_WRITE (1<<1)
+#define FILE_CREATE (1<<2)
+#define FILE_RESET (1<<3)
+#define FILE_BINARY (1<<4)
+
+typedef struct _file_t {
+  FILE *handle;
+  char *path;
+  uint32_t mode;
+} file_t;
+
+file_t*
+file_open (const char *path, uint32_t mode)
+{
+  file_t *file = allocate(sizeof(file_t));
+  memset(file, 0, sizeof(file_t));
+
+  file->path = str_copy(path, strlen(path));
+  file->mode = mode;
+
+  struct stat st;
+  int exists = stat(file->path, &st) == 0;
+
+  char fmode[5];
+  strcpy(fmode, "r");
+
+  if (mode & (FILE_WRITE|FILE_CREATE))
+    strcat(fmode, "+");
+
+  if (mode & FILE_RESET || (!exists && mode & FILE_CREATE))
+    strcpy(fmode, "w+");
+
+  if (mode & FILE_BINARY)
+    strcat(fmode, "b");
+
+  file->handle = fopen(file->path, fmode);
+
+  if (!file->handle)
+  {
+    free(file->path);
+    free(file);
+    return NULL;
+  }
+
+  return file;
+}
+
+void
+file_close (file_t *file)
+{
+  fclose(file->handle);
+  free(file->path);
+  free(file);
+}
+
+off_t
+file_tell (file_t *file)
+{
+  return ftello(file->handle);
+}
+
+int
+file_seek (file_t *file, off_t position)
+{
+  return fseeko(file->handle, position, SEEK_SET) == 0;
+}
+
+int
+file_read (file_t *file, void *ptr, size_t bytes)
+{
+  size_t read = 0;
+  for (int i = 0; i < 3; i++)
+  {
+    read += fread(ptr + read, 1, bytes - read, file->handle);
+    if (read == bytes) return 1;
+  }
+  return 0;
+}
+
+int
+file_write (file_t *file, void *ptr, size_t bytes)
+{
+  size_t written = 0;
+  for (int i = 0; i < 3; i++)
+  {
+    written += fwrite(ptr + written, 1, bytes - written, file->handle);
+    if (written == bytes) return 1;
+  }
+  return 0;
+}
 
 struct _array_t;
 typedef void (*array_callback)(struct _array_t*);
