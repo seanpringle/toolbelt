@@ -713,6 +713,16 @@ file_write (file_t *file, void *ptr, size_t bytes)
   return 0;
 }
 
+int
+file_print (file_t *file, const char *pattern, ...)
+{
+  va_list args;
+  va_start(args, pattern);
+  int len = vfprintf(file->handle, pattern, args);
+  va_end(args);
+  return len;
+}
+
 struct _array_t;
 typedef void (*array_callback)(struct _array_t*);
 
