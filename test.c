@@ -88,7 +88,9 @@ main (int argc, char *argv[])
 
   map_free(map);
 
-  map = map_create(map_hash_int, map_cmp_int);
+  map = map_create();
+  map->hash = map_hash_int;
+  map->compare = map_cmp_int;
 
   int i1 = 1;
   int i2 = 2;
@@ -201,11 +203,25 @@ main (int argc, char *argv[])
 
   array_free(ar);
 
-  text_t *text = text_create("hello");
-  text_append(text, " world");
-  text_prepend(text, "I say, ");
+  text_t *text = textf("hello");
+  text_at(text, text_count(text));
+  text_ins(text, " world");
+  text_at(text, 0);
+  text_del(text, 1);
+  text_ins(text, "I say, ");
+  text_t *text2 = text_take(text, 0, 1);
+  text_t *text3 = text_take(text, 5, 5);
+  text_t *text4 = text_take(text, -5, 5);
+
   printf("%s\n", text_get(text));
+  printf("%s\n", text_get(text2));
+  printf("%s\n", text_get(text3));
+  printf("%s\n", text_get(text4));
+
   text_free(text);
+  text_free(text2);
+  text_free(text3);
+  text_free(text4);
 
   return EXIT_SUCCESS;
 }

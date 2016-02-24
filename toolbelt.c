@@ -4,21 +4,21 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdarg.h>
-#include <signal.h>
 #include <ctype.h>
 #include <string.h>
 #include <unistd.h>
 #include <regex.h>
-#include <errno.h>
-#include <time.h>
-#include <math.h>
-#include <libgen.h>
-#include <pthread.h>
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <sys/stat.h>
-#include <sys/types.h>
-#include <wchar.h>
+
+//#include <signal.h>
+//#include <errno.h>
+//#include <time.h>
+//#include <math.h>
+//#include <libgen.h>
+//#include <pthread.h>
+//#include <sys/types.h>
 
 #define PRIME_1000 997
 #define PRIME_10000 9973
@@ -104,8 +104,10 @@ mprintf (char *pattern, ...)
   return result;
 }
 
+typedef struct { off_t index; char *subject; int l1; } str_each_t;
+
 #define str_each(l,_val_) for ( \
-  struct { off_t index; char *subject; int l1; } loop = { 0, (l), 0 }; \
+  str_each_t loop = { 0, (l), 0 }; \
     !loop.l1 && loop.subject[loop.index] && (loop.l1 = 1); \
     loop.index++ \
   ) \
@@ -381,16 +383,58 @@ text_free (text_t *text)
   free(text);
 }
 
-text_t*
+const char*
+text_at (text_t *text, off_t pos)
+{
+  text->cursor = min(text->bytes - 1, max(0, pos));
+  return &text->buffer[text->cursor];
+}
+
+const char*
+text_go (text_t *text, int offset)
+{
+  text->cursor = min(text->bytes - 1, max(0, (int)text->cursor + offset));
+  return &text->buffer[text->cursor];
+}
+
+void
 text_set (text_t *text, const char *str)
 {
   text_empty(text);
 
   text->bytes = strlen(str) + 1;
   text->buffer = allocate(text->bytes);
+  text->cursor = text->bytes - 1;
   strcpy(text->buffer, str);
+}
 
-  return text;
+void
+text_ins (text_t *text, const char *str)
+{
+  if (!text->buffer)
+  {
+    text_set(text, str);
+    return;
+  }
+
+  size_t new_bytes = strlen(str);
+  text->buffer = reallocate(text->buffer, text->bytes + new_bytes);
+  memmove(&text->buffer[text->cursor + new_bytes], &text->buffer[text->cursor], text->bytes - text->cursor);
+  memmove(&text->buffer[text->cursor], str, new_bytes);
+  text->cursor += new_bytes;
+  text->bytes += new_bytes;
+}
+
+void
+text_del (text_t *text, size_t bytes)
+{
+  if (text->buffer)
+  {
+    bytes = min(text->bytes - text->cursor - 1, bytes);
+    memmove(&text->buffer[text->cursor], &text->buffer[text->cursor + bytes], text->bytes - bytes);
+    text->bytes -= bytes;
+    text_at(text, text->cursor);
+  }
 }
 
 size_t
@@ -428,32 +472,20 @@ text_get (text_t *text)
   return text->buffer ? text->buffer: text_nil;
 }
 
-void
-text_append (text_t *text, const char *str)
-{
-  text_format(text, "%s%s", text_get(text), str);
-}
-
-void
-text_prepend (text_t *text, const char *str)
-{
-  text_format(text, "%s%s", str, text_get(text));
-}
-
 int
-text_compare (text_t *text, const char *str)
+text_cmp (text_t *text, const char *str)
 {
   return text->buffer ? strcmp(text->buffer, str): -1;
 }
 
 size_t
-text_length (text_t *text)
+text_count (text_t *text)
 {
   return text->buffer ? text->bytes-1: 0;
 }
 
 size_t
-text_width (text_t *text)
+text_len (text_t *text)
 {
   if (text->buffer)
   {
@@ -475,7 +507,7 @@ text_scan (text_t *text, str_cb_ischar cb)
 {
   if (text->buffer)
   {
-    size_t n = str_scan(text->buffer, cb);
+    size_t n = str_scan(text->buffer + text->cursor, cb);
     text->cursor += n;
     return n;
   }
@@ -487,7 +519,7 @@ text_skip (text_t *text, str_cb_ischar cb)
 {
   if (text->buffer)
   {
-    size_t n = str_skip(text->buffer, cb);
+    size_t n = str_skip(text->buffer + text->cursor, cb);
     text->cursor += n;
     return n;
   }
@@ -524,7 +556,7 @@ text_trim (text_t *text, str_cb_ischar cb)
 #define TEXT_SQL STR_ENCODE_SQL
 #define TEXT_DQUOTE STR_ENCODE_DQUOTE
 
-text_t*
+int
 text_encode (text_t *text, int type)
 {
   if (text->buffer)
@@ -532,20 +564,26 @@ text_encode (text_t *text, int type)
     char *result = str_encode(text->buffer, type);
     text_empty(text);
     text_set(text, result);
+    return 1;
   }
-  return text;
+  return 0;
 }
 
-text_t*
+int
 text_decode (text_t *text, int type)
 {
   if (text->buffer)
   {
-    char *result = str_decode(text->buffer, NULL, type);
-    text_empty(text);
-    text_set(text, result);
+    char *err = NULL;
+    char *result = str_decode(text->buffer, &err, type);
+    if (err == text->buffer + text->bytes - 1)
+    {
+      text_empty(text);
+      text_set(text, result);
+      return 1;
+    }
   }
-  return text;
+  return 0;
 }
 
 int
@@ -577,6 +615,28 @@ text_copy (text_t *text)
   return text_create(text_get(text));
 }
 
+text_t*
+text_take (text_t *text, int pos, int len)
+{
+  text_t *new = text_create(NULL);
+  if (text->buffer)
+  {
+    pos = pos >= 0 ? min(text->bytes-1, pos): max(0, (int)text->bytes + pos - 1);
+
+    int available = text->bytes - pos - 1;
+
+    len = len >= 0 ? min(len, available): max(0, available + len);
+
+    new->bytes = len + 1;
+    new->buffer = allocate(new->bytes);
+    memmove(new->buffer, &text->buffer[pos], len);
+    new->buffer[len] = 0;
+  }
+  return new;
+}
+
+#define textf(...) ({ text_t *t = text_create(NULL); text_format(t, __VA_ARGS__); t; })
+
 struct _array_t;
 typedef void (*array_callback)(struct _array_t*);
 
@@ -587,8 +647,10 @@ typedef struct _array_t {
   array_callback empty;
 } array_t;
 
+typedef struct { off_t index; array_t *array; int l1; } array_each_t;
+
 #define array_each(l,_val_) for ( \
-  struct { off_t index; array_t *array; int l1; } loop = { 0, (l), 0 }; \
+  array_each_t loop = { 0, (l), 0 }; \
     loop.index < loop.array->width && !loop.l1 && (loop.l1 = 1); \
     loop.index++ \
   ) \
@@ -676,8 +738,10 @@ typedef struct _vector_t {
   vector_callback empty;
 } vector_t;
 
+typedef struct { off_t index; vector_t *vector; int l1; } vector_each_t;
+
 #define vector_each(l,_val_) for ( \
-  struct { off_t index; vector_t *vector; int l1; } loop = { 0, (l), 0 }; \
+  vector_each_t loop = { 0, (l), 0 }; \
     loop.index < loop.vector->count && !loop.l1 && (loop.l1 = 1); \
     loop.index++ \
   ) \
@@ -824,8 +888,10 @@ list_next (list_t *list, list_node_t *node)
   return node ? node->next: list->nodes;
 }
 
+typedef struct { off_t index; list_t *list; list_node_t *node; int l1; } list_each_t;
+
 #define list_each(l,_val_) for ( \
-  struct { off_t index; list_t *list; list_node_t *node; int l1; } loop = { 0, (l), NULL, 0 }; \
+  list_each_t loop = { 0, (l), NULL, 0 }; \
     !loop.l1 && (loop.node = list_next(loop.list, loop.node)) && (loop.l1 = 1); \
     loop.index++ \
   ) \
@@ -1035,23 +1101,29 @@ map_next (map_t *map, map_node_t *node)
   return NULL;
 }
 
+typedef struct { off_t index; map_t *map; map_node_t *node; int l1; int l2; } map_each_t;
+
 #define map_each(l,_key_,_val_) for ( \
-  struct { off_t index; map_t *map; map_node_t *node; int l1; int l2; } loop = { 0, (l), NULL, 0, 0 }; \
+  map_each_t loop = { 0, (l), NULL, 0, 0 }; \
     !loop.l1 && !loop.l2 && (loop.node = map_next(loop.map, loop.node)) && (loop.l1 = 1) && (loop.l2 = 1); \
     loop.index++ \
   ) \
     for (_key_ = loop.node->key; loop.l1; loop.l1 = !loop.l1) \
       for (_val_ = loop.node->val; loop.l2; loop.l2 = !loop.l2)
 
+typedef struct { off_t index; map_t *map; map_node_t *node; int l1; } map_each_key_t;
+
 #define map_each_key(l,_key_) for ( \
-  struct { off_t index; map_t *map; map_node_t *node; int l1; } loop = { 0, (l), NULL, 0 }; \
+  map_each_key_t loop = { 0, (l), NULL, 0 }; \
     !loop.l1 && (loop.node = map_next(loop.map, loop.node)) && (loop.l1 = 1); \
     loop.index++ \
   ) \
     for (_key_ = loop.node->key; loop.l1; loop.l1 = !loop.l1)
 
+typedef struct { off_t index; map_t *map; map_node_t *node; int l1; } map_each_val_t;
+
 #define map_each_val(l,_val_) for ( \
-  struct { off_t index; map_t *map; map_node_t *node; int l1; } loop = { 0, (l), NULL, 0 }; \
+  map_each_val_t loop = { 0, (l), NULL, 0 }; \
     !loop.l1 && (loop.node = map_next(loop.map, loop.node)) && (loop.l1 = 1); \
     loop.index++ \
   ) \
@@ -1794,8 +1866,10 @@ pool_next (pool_t *pool, off_t position)
   return (position < pool->head->psize) ? position: 0;
 }
 
+typedef struct { off_t index; pool_t *pool; off_t pos; int l1; } pool_each_t;
+
 #define pool_each(l,_val_) for ( \
-  struct { off_t index; pool_t *pool; off_t pos; int l1; } loop = { 0, (l), 0, 0 }; \
+  pool_each_t loop = { 0, (l), 0, 0 }; \
     !loop.l1 && (loop.pos = pool_next(loop.pool, loop.pos)) && (loop.l1 = 1); \
     loop.index++ \
   ) \
