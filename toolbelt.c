@@ -476,7 +476,7 @@ text_len (text_t *text)
   return 0;
 }
 
-size_t
+off_t
 text_scan (text_t *text, str_cb_ischar cb)
 {
   if (text->buffer)
@@ -608,6 +608,9 @@ text_take (text_t *text, int pos, int len)
   }
   return new;
 }
+
+void text_home (text_t *text) { text_at(text, 0); }
+void text_end  (text_t *text) { text_at(text, text_count(text)); }
 
 #define textf(...) ({ text_t *t = text_create(NULL); text_format(t, __VA_ARGS__); t; })
 
