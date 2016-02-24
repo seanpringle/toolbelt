@@ -12,14 +12,6 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
-//#include <signal.h>
-//#include <errno.h>
-//#include <time.h>
-//#include <math.h>
-//#include <libgen.h>
-//#include <pthread.h>
-//#include <sys/types.h>
-
 #define PRIME_1000 997
 #define PRIME_10000 9973
 #define PRIME_100000 99991
