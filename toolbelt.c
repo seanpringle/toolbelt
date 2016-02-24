@@ -324,7 +324,7 @@ typedef struct _text_t {
 static const char *text_nil = "";
 
 text_t*
-text_empty (text_t *text)
+text_clear (text_t *text)
 {
   if (text->buffer)
     free(text->buffer);
@@ -338,7 +338,7 @@ text_empty (text_t *text)
 void
 text_free (text_t *text)
 {
-  text_empty(text);
+  text_clear(text);
   free(text);
 }
 
@@ -365,7 +365,7 @@ text_pos (text_t *text)
 void
 text_set (text_t *text, const char *str)
 {
-  text_empty(text);
+  text_clear(text);
 
   text->bytes = strlen(str) + 1;
   text->buffer = allocate(text->bytes);
@@ -421,13 +421,13 @@ text_format (text_t *text, const char *pattern, ...)
     bytes = vsnprintf(result, len+1, pattern, args) + 1;
     va_end(args);
 
-    text_empty(text);
+    text_clear(text);
     text->bytes = bytes + 1;
     text->buffer = result;
     return bytes;
   }
 
-  text_empty(text);
+  text_clear(text);
   return 0;
 }
 
@@ -527,7 +527,7 @@ text_encode (text_t *text, int type)
   if (text->buffer)
   {
     char *result = str_encode(text->buffer, type);
-    text_empty(text);
+    text_clear(text);
     text_set(text, result);
     return 1;
   }
@@ -543,7 +543,7 @@ text_decode (text_t *text, int type)
     char *result = str_decode(text->buffer, &err, type);
     if (err == text->buffer + text->bytes - 1)
     {
-      text_empty(text);
+      text_clear(text);
       text_set(text, result);
       return 1;
     }
@@ -612,7 +612,7 @@ typedef struct _array_t {
   void **items;
   size_t count;
   size_t width;
-  array_callback empty;
+  array_callback clear;
 } array_t;
 
 typedef struct { off_t index; array_t *array; int l1; } array_each_t;
@@ -625,7 +625,7 @@ typedef struct { off_t index; array_t *array; int l1; } array_each_t;
     for (_val_ = loop.array->items[loop.index]; loop.l1; loop.l1 = !loop.l1)
 
 void
-array_empty_free_vals (array_t *array)
+array_clear_free_vals (array_t *array)
 {
   array_each(array, void *ptr) free(ptr);
 }
@@ -636,7 +636,7 @@ array_init (array_t *array, size_t width)
   array->items = NULL;
   array->count = 0;
   array->width = width;
-  array->empty = NULL;
+  array->clear = NULL;
 }
 
 void
@@ -655,12 +655,12 @@ array_create (size_t width)
 }
 
 void
-array_empty (array_t *array)
+array_clear (array_t *array)
 {
   if (array->items)
   {
-    if (array->empty)
-      array->empty(array);
+    if (array->clear)
+      array->clear(array);
     free(array->items);
     array->items = NULL;
     array->count = 0;
@@ -670,7 +670,7 @@ array_empty (array_t *array)
 void
 array_free (array_t *array)
 {
-  array_empty(array);
+  array_clear(array);
   free(array);
 }
 
@@ -703,7 +703,7 @@ typedef void (*vector_callback)(struct _vector_t*);
 typedef struct _vector_t {
   void **items;
   size_t count;
-  vector_callback empty;
+  vector_callback clear;
 } vector_t;
 
 typedef struct { off_t index; vector_t *vector; int l1; } vector_each_t;
@@ -716,7 +716,7 @@ typedef struct { off_t index; vector_t *vector; int l1; } vector_each_t;
     for (_val_ = loop.vector->items[loop.index]; loop.l1; loop.l1 = !loop.l1)
 
 void
-vector_empty_free_vals (vector_t *vector)
+vector_clear_free_vals (vector_t *vector)
 {
   vector_each(vector, void *ptr) free(ptr);
 }
@@ -726,7 +726,7 @@ vector_init (vector_t *vector)
 {
   vector->items = NULL;
   vector->count = 0;
-  vector->empty = NULL;
+  vector->clear = NULL;
 }
 
 void
@@ -745,12 +745,12 @@ vector_create ()
 }
 
 void
-vector_empty (vector_t *vector)
+vector_clear (vector_t *vector)
 {
   if (vector->items)
   {
-    if (vector->empty)
-      vector->empty(vector);
+    if (vector->clear)
+      vector->clear(vector);
     free(vector->items);
     vector->items = NULL;
     vector->count = 0;
@@ -760,7 +760,7 @@ vector_empty (vector_t *vector)
 void
 vector_free (vector_t *vector)
 {
-  vector_empty(vector);
+  vector_clear(vector);
   free(vector);
 }
 
@@ -847,7 +847,7 @@ typedef struct _list_node_t {
 typedef struct _list_t {
   list_node_t *nodes;
   size_t count;
-  list_callback empty;
+  list_callback clear;
 } list_t;
 
 list_node_t*
@@ -945,9 +945,9 @@ list_create ()
 }
 
 void
-list_empty (list_t *list)
+list_clear (list_t *list)
 {
-  if (list->empty) list->empty(list);
+  if (list->clear) list->clear(list);
   while (list->nodes)
   {
     list_node_t *node = list->nodes;
@@ -960,7 +960,7 @@ list_empty (list_t *list)
 void
 list_free (list_t *list)
 {
-  list_empty(list);
+  list_clear(list);
   free(list);
 }
 
@@ -1017,7 +1017,7 @@ list_scan_skip (char *s, str_cb_ischar cb)
 }
 
 void
-list_empty_free (list_t *list)
+list_clear_free (list_t *list)
 {
   list_each(list, void *val) free(val);
 }
@@ -1038,7 +1038,7 @@ typedef struct _map_t {
   vector_t *chains;
   map_callback_hash hash;
   map_callback_cmp compare;
-  map_callback empty;
+  map_callback clear;
   size_t count;
   size_t width;
   size_t depth;
@@ -1127,7 +1127,7 @@ map_init (map_t *map, size_t width)
   map->chains  = NULL;
   map->hash    = NULL;
   map->compare = NULL;
-  map->empty   = NULL;
+  map->clear   = NULL;
   map->count   = 0;
   map->width   = width;
   map->depth   = 5;
@@ -1143,7 +1143,7 @@ map_init_chains (map_t *map)
   for (off_t i = 0; i < map->width; i++)
   {
     vector_init(&map->chains[i]);
-    map->chains[i].empty = vector_empty_free_vals;
+    map->chains[i].clear = vector_clear_free_vals;
   }
 }
 
@@ -1165,8 +1165,8 @@ map_resize (map_t *map, size_t width)
       int chain = node->hash % tmp.width;
       vector_push(&tmp.chains[chain], node);
     }
-    map->chains[i].empty = NULL;
-    vector_empty(&map->chains[i]);
+    map->chains[i].clear = NULL;
+    vector_clear(&map->chains[i]);
   }
   free(map->chains);
   map->chains = tmp.chains;
@@ -1290,15 +1290,15 @@ map_create ()
 }
 
 void
-map_empty (map_t *map)
+map_clear (map_t *map)
 {
   if (map->chains)
   {
-    if (map->empty)
-      map->empty(map);
+    if (map->clear)
+      map->clear(map);
 
     for (int i = 0; i < map->width; i++)
-      vector_empty(&map->chains[i]);
+      vector_clear(&map->chains[i]);
 
     free(map->chains);
     map->count = 0;
@@ -1308,7 +1308,7 @@ map_empty (map_t *map)
 void
 map_free (map_t *map)
 {
-  map_empty(map);
+  map_clear(map);
   free(map);
 }
 
@@ -1319,37 +1319,37 @@ map_count (map_t *map)
 }
 
 void
-map_empty_free (map_t *map)
+map_clear_free (map_t *map)
 {
   map_each(map, void *key, void *val) { free(key); free(val); }
 }
 
 void
-map_empty_free_keys (map_t *map)
+map_clear_free_keys (map_t *map)
 {
   map_each_key(map, void *key) free(key);
 }
 
 void
-map_empty_free_vals (map_t *map)
+map_clear_free_vals (map_t *map)
 {
   map_each_val(map, void *val) free(val);
 }
 
 void
-map_empty_text_free (map_t *map)
+map_clear_text_free (map_t *map)
 {
   map_each(map, void *key, void *val) { text_free(key); text_free(val); }
 }
 
 void
-map_empty_text_free_keys (map_t *map)
+map_clear_text_free_keys (map_t *map)
 {
   map_each_key(map, void *key) text_free(key);
 }
 
 void
-map_empty_text_free_vals (map_t *map)
+map_clear_text_free_vals (map_t *map)
 {
   map_each_val(map, void *val) text_free(val);
 }
