@@ -57,7 +57,7 @@ regmatch (regex_t *re, char *subject)
 }
 
 uint32_t
-djb_hash (char *str)
+djb_hash (const char *str)
 {
   uint32_t hash = 5381;
   for (int i = 0; str[i]; hash = hash * 33 + str[i++]);
