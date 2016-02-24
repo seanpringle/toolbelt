@@ -365,6 +365,12 @@ text_go (text_t *text, int offset)
   return &text->buffer[text->cursor];
 }
 
+off_t
+text_pos (text_t *text)
+{
+  return text->cursor;
+}
+
 void
 text_set (text_t *text, const char *str)
 {
