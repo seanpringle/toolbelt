@@ -610,7 +610,7 @@ text_take (text_t *text, int pos, int len)
 }
 
 void text_home (text_t *text) { text_at(text, 0); }
-void text_end  (text_t *text) { text_at(text, text_count(text)); }
+off_t text_end (text_t *text) { text_at(text, text_count(text)); return text->cursor; }
 
 #define textf(...) ({ text_t *t = text_create(NULL); text_format(t, __VA_ARGS__); t; })
 
