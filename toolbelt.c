@@ -162,31 +162,6 @@ int isdquote (int c) { return c == '"'; }
 int issquote (int c) { return c == '\''; }
 int isname (int c) { return isalnum(c) || c == '_'; }
 
-int
-str_count (char *str, str_cb_ischar cb)
-{
-  int count = 0;
-  str_each(str, char c)
-    if (cb(c)) count++;
-  return count;
-}
-
-int
-str_strip (char *s, str_cb_ischar cb)
-{
-  int count = 0;
-  while (s && *s)
-  {
-    if (cb(*s))
-    {
-      memmove(s, s+1, strlen(s+1)+1);
-      count++;
-    }
-    s++;
-  }
-  return count;
-}
-
 char*
 str_copy (char *s, size_t length)
 {
@@ -194,13 +169,6 @@ str_copy (char *s, size_t length)
   memmove(a, s, length);
   a[length] = 0;
   return a;
-}
-
-int
-str_is_tsv (char *line, int cols)
-{
-  int length = line ? strlen(line): 0;
-  return line && length >= cols && str_count(line, istab) == cols-1;
 }
 
 #define STR_ENCODE_HEX 1

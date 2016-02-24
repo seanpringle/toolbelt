@@ -34,11 +34,6 @@ main (int argc, char *argv[])
   free(a);
   free(b);
 
-  char *tsv = "alpha\tbeta\tgamma";
-
-  ensure(str_is_tsv(tsv, 3))
-    errorf("str_is_tsv");
-
   list_t *list = list_create();
   ensure(list) errorf("list_create");
 
@@ -125,9 +120,6 @@ main (int argc, char *argv[])
 
   ensure(str_scan("hello", isspace) == 5)
     errorf("str_skip");
-
-  ensure(str_count("hello", isspace) == 0)
-    errorf("str_count");
 
   char *dquote = str_decode("\"hello\\nworld\\n\"", NULL, STR_ENCODE_DQUOTE);
   ensure(!strcmp(dquote, "hello\nworld\n"))
