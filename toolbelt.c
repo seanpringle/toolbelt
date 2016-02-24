@@ -723,6 +723,12 @@ file_print (file_t *file, const char *pattern, ...)
   return len;
 }
 
+char*
+file_read_line (file_t *file)
+{
+  return mfgets(file->handle);
+}
+
 struct _array_t;
 typedef void (*array_callback)(struct _array_t*);
 
