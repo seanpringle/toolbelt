@@ -652,11 +652,28 @@ file_open (const char *path, uint32_t mode)
   return file;
 }
 
+file_t*
+file_wrap (FILE *handle, uint32_t mode)
+{
+  file_t *file = allocate(sizeof(file_t));
+  memset(file, 0, sizeof(file_t));
+
+  file->handle = handle;
+  file->mode = mode;
+  return file;
+}
+
 void
 file_close (file_t *file)
 {
   fclose(file->handle);
   free(file->path);
+  free(file);
+}
+
+void
+file_unwrap (file_t *file)
+{
   free(file);
 }
 
