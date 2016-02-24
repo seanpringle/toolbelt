@@ -1118,6 +1118,18 @@ map_str_compare (void *a, void *b)
   return strcmp((char*)a, (char*)b);
 }
 
+uint32_t
+map_text_hash (void *a)
+{
+  return djb_hash(text_get((text_t*)a));
+}
+
+int
+map_text_compare (void *a, void *b)
+{
+  return strcmp(text_get((text_t*)a), text_get((text_t*)b));
+}
+
 void
 map_init (map_t *map, size_t width)
 {
@@ -1332,6 +1344,25 @@ map_empty_free_vals (map_t *map)
 {
   map_each_val(map, void *val) free(val);
 }
+
+void
+map_empty_text_free (map_t *map)
+{
+  map_each(map, void *key, void *val) { text_free(key); text_free(val); }
+}
+
+void
+map_empty_text_free_keys (map_t *map)
+{
+  map_each_key(map, void *key) text_free(key);
+}
+
+void
+map_empty_text_free_vals (map_t *map)
+{
+  map_each_val(map, void *val) text_free(val);
+}
+
 
 #define JSON_OBJECT 1
 #define JSON_ARRAY 2
