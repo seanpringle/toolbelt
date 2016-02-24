@@ -729,6 +729,60 @@ file_read_line (file_t *file)
   return mfgets(file->handle);
 }
 
+void*
+file_slurp (const char *path, size_t *size)
+{
+  void *ptr = NULL;
+
+  struct stat st;
+  if (stat(path, &st) != 0)
+    return NULL;
+
+  FILE *file = fopen(path, "r");
+  if (!file) return NULL;
+
+  size_t bytes = st.st_size;
+  ptr = allocate(bytes + 1);
+
+  size_t read = 0;
+  for (int i = 0; i < 3; i++)
+  {
+    read += fread(ptr + read, 1, bytes - read, file);
+    if (read == bytes) break;
+  }
+  if (read != bytes)
+    goto fail;
+
+  if (size)
+    *size = bytes;
+  ((char*)ptr)[bytes] = 0;
+  fclose(file);
+  return ptr;
+
+fail:
+  fclose(file);
+  free(ptr);
+  return NULL;
+}
+
+int
+file_blurt (const char *path, void *ptr, size_t bytes)
+{
+  FILE *file = fopen(path, "w");
+  if (!file) return 0;
+
+  size_t written = 0;
+  for (int i = 0; i < 3; i++)
+  {
+    written += fwrite(ptr + written, 1, bytes - written, file);
+    if (written == bytes) break;
+  }
+
+  fclose(file);
+
+  return written == bytes;
+}
+
 struct _array_t;
 typedef void (*array_callback)(struct _array_t*);
 
