@@ -372,7 +372,7 @@ text_set (text_t *text, const char *str)
 
   text->bytes = strlen(str) + 1;
   text->buffer = allocate(text->bytes);
-  text->cursor = text->bytes - 1;
+  text->cursor = 0;
   strcpy(text->buffer, str);
 }
 
