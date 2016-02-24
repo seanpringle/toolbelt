@@ -19,7 +19,6 @@
 
 #define ensure(x) for ( ; !(x) ; exit(EXIT_FAILURE) )
 #define errorf(...) do { fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); } while(0)
-#define unless(c) if (!(c))
 
 #define min(a,b) ({ __typeof__(a) _a = (a); __typeof__(b) _b = (b); _a < _b ? _a: _b; })
 #define max(a,b) ({ __typeof__(a) _a = (a); __typeof__(b) _b = (b); _a > _b ? _a: _b; })
