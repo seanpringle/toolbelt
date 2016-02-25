@@ -1479,6 +1479,7 @@ map_clear (map_t *map)
       vector_clear(&map->chains[i]);
 
     free(map->chains);
+    map->chains = NULL;
     map->count = 0;
   }
 }
