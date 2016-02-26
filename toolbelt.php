@@ -1295,6 +1295,12 @@ class Query
         return $this;
     }
 
+    public function where_raw($clause)
+    {
+        $this->where[] = $clause;
+        return $this;
+    }
+
     public function where_fk($field, $value)
     {
         $this->where[] = self::quote_field($field).' = '.self::quote_field($value);
