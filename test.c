@@ -220,5 +220,12 @@ main (int argc, char *argv[])
   file_write(file, "bar\n", 4);
   file_close(file);
 
+  char *fubar = file_slurp("fubar", NULL);
+
+  ensure(fubar && !strcmp(fubar, "fu\nbar\n"))
+    errorf("file_slurp");
+
+  free(fubar);
+
   return EXIT_SUCCESS;
 }
