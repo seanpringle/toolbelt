@@ -1242,7 +1242,8 @@ class Query
 
     public function on($field, $value, $op)
     {
-        $this->where($field, $value, $op);
+        $query = $this->joins[count($this->joins)-1][0];
+        $query->where($field, $value, $op);
     }
 
     public function __call($name, $arguments)
