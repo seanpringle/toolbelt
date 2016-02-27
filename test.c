@@ -227,5 +227,8 @@ main (int argc, char *argv[])
 
   free(fubar);
 
+  unlink("fubar");
+  unlink("pool");
+
   return EXIT_SUCCESS;
 }

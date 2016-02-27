@@ -48,7 +48,7 @@ regmatch (regex_t *re, char *subject)
 }
 
 uint32_t
-djb_hash (const char *str)
+djb_hash (char *str)
 {
   uint32_t hash = 5381;
   for (int i = 0; str[i]; hash = hash * 33 + str[i++]);
@@ -152,9 +152,11 @@ int isbackslash (int c) { return c == '\\'; }
 int isdquote (int c) { return c == '"'; }
 int issquote (int c) { return c == '\''; }
 int isname (int c) { return isalnum(c) || c == '_'; }
+int iscolon (int c) { return c == ':'; }
+int issemicolon (int c) { return c == ';'; }
 
 char*
-str_copy (const char *s, size_t length)
+str_copy (char *s, size_t length)
 {
   char *a = allocate(length+1);
   memmove(a, s, length);
@@ -171,7 +173,7 @@ str_encode (char *s, int format)
 {
   char *result = NULL;
 
-  static const char* hex256[256] = {
+  static char* hex256[256] = {
     "00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "0a", "0b", "0c", "0d", "0e", "0f",
     "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "1a", "1b", "1c", "1d", "1e", "1f",
     "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "2a", "2b", "2c", "2d", "2e", "2f",
@@ -321,7 +323,7 @@ typedef struct _text_t {
   off_t cursor;
 } text_t;
 
-static const char *text_nil = "";
+static char *text_nil = "";
 
 void
 text_clear (text_t *text)
@@ -341,17 +343,17 @@ text_free (text_t *text)
   free(text);
 }
 
-const char*
+char*
 text_at (text_t *text, off_t pos)
 {
   text->cursor = min(text->bytes - 1, max(0, pos));
   return &text->buffer[text->cursor];
 }
 
-const char*
+char*
 text_go (text_t *text, int offset)
 {
-  text->cursor = min(text->bytes - 1, max(0, (int)text->cursor + offset));
+  text->cursor = min(text->bytes - 1, max(0, (int64_t)text->cursor + offset));
   return &text->buffer[text->cursor];
 }
 
@@ -362,7 +364,7 @@ text_pos (text_t *text)
 }
 
 void
-text_set (text_t *text, const char *str)
+text_set (text_t *text, char *str)
 {
   text_clear(text);
 
@@ -373,11 +375,12 @@ text_set (text_t *text, const char *str)
 }
 
 void
-text_ins (text_t *text, const char *str)
+text_ins (text_t *text, char *str)
 {
   if (!text->buffer)
   {
     text_set(text, str);
+    text->cursor = text->bytes - 1;
     return;
   }
 
@@ -395,14 +398,17 @@ text_del (text_t *text, size_t bytes)
   if (text->buffer)
   {
     bytes = min(text->bytes - text->cursor - 1, bytes);
-    memmove(&text->buffer[text->cursor], &text->buffer[text->cursor + bytes], text->bytes - bytes);
+    memmove(&text->buffer[text->cursor],
+      &text->buffer[text->cursor + bytes],
+      text->bytes - text->cursor - bytes
+    );
     text->bytes -= bytes;
     text_at(text, text->cursor);
   }
 }
 
 size_t
-text_format (text_t *text, const char *pattern, ...)
+text_format (text_t *text, char *pattern, ...)
 {
   size_t bytes = 0;
   char *result = NULL;
@@ -430,14 +436,14 @@ text_format (text_t *text, const char *pattern, ...)
   return 0;
 }
 
-const char*
+char*
 text_get (text_t *text)
 {
   return text->buffer ? text->buffer: text_nil;
 }
 
 int
-text_cmp (text_t *text, const char *str)
+text_cmp (text_t *text, char *str)
 {
   return text->buffer ? strcmp(text->buffer, str): -1;
 }
@@ -491,7 +497,7 @@ text_skip (text_t *text, str_cb_ischar cb)
 }
 
 size_t
-text_find (text_t *text, const char *str)
+text_find (text_t *text, char *str)
 {
   if (text->buffer)
   {
@@ -553,7 +559,7 @@ text_decode (text_t *text, int type)
 int
 text_match (text_t *text, regex_t *re)
 {
-  return text->buffer ? regmatch(re, text->buffer): 0;
+  return text->buffer ? regmatch(re, text->buffer + text->cursor): 0;
 }
 
 text_t*
@@ -561,11 +567,12 @@ text_init (text_t *text)
 {
   text->buffer = NULL;
   text->bytes = 0;
+  text->cursor = 0;
   return text;
 }
 
 text_t*
-text_create (const char *str)
+text_create (char *str)
 {
   text_t *text = allocate(sizeof(text_t));
   text_init(text);
@@ -580,12 +587,12 @@ text_copy (text_t *text)
 }
 
 text_t*
-text_take (text_t *text, int pos, int len)
+text_take (text_t *text, off_t pos, size_t len)
 {
   text_t *new = text_create(NULL);
   if (text->buffer)
   {
-    pos = pos >= 0 ? min(text->bytes-1, pos): max(0, (int)text->bytes + pos - 1);
+    pos = pos >= 0 ? min(text->bytes-1, pos): max(0, (int64_t)text->bytes + pos - 1);
 
     int available = text->bytes - pos - 1;
 
@@ -617,7 +624,7 @@ typedef struct _file_t {
 } file_t;
 
 file_t*
-file_open (const char *path, uint32_t mode)
+file_open (char *path, uint32_t mode)
 {
   file_t *file = allocate(sizeof(file_t));
   memset(file, 0, sizeof(file_t));
@@ -714,7 +721,7 @@ file_write (file_t *file, void *ptr, size_t bytes)
 }
 
 int
-file_print (file_t *file, const char *pattern, ...)
+file_print (file_t *file, char *pattern, ...)
 {
   va_list args;
   va_start(args, pattern);
@@ -730,7 +737,7 @@ file_read_line (file_t *file)
 }
 
 void*
-file_slurp (const char *path, size_t *size)
+file_slurp (char *path, size_t *size)
 {
   void *ptr = NULL;
 
@@ -766,7 +773,7 @@ fail:
 }
 
 int
-file_blurt (const char *path, void *ptr, size_t bytes)
+file_blurt (char *path, void *ptr, size_t bytes)
 {
   FILE *file = fopen(path, "w");
   if (!file) return 0;
