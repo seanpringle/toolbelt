@@ -2298,6 +2298,7 @@ typedef struct _channel_t {
   pthread_mutex_t mutex;
   pthread_cond_t cond;
   vector_t *queue;
+  size_t waiters;
 } channel_t;
 
 channel_t*
@@ -2307,6 +2308,7 @@ channel_create ()
   pthread_mutex_init(&channel->mutex, NULL);
   pthread_cond_init(&channel->cond, NULL);
   channel->queue = vector_create();
+  channel->waiters = 0;
   return channel;
 }
 
@@ -2329,13 +2331,46 @@ channel_write (channel_t *channel, void *ptr)
   pthread_mutex_unlock(&channel->mutex);
 }
 
+size_t
+channel_backlog (channel_t *channel)
+{
+  pthread_mutex_lock(&channel->mutex);
+  size_t backlog = vector_count(channel->queue);
+  pthread_mutex_unlock(&channel->mutex);
+  return backlog;
+}
+
+size_t
+channel_waiters (channel_t *channel)
+{
+  pthread_mutex_lock(&channel->mutex);
+  size_t waiters = channel->waiters;
+  pthread_mutex_unlock(&channel->mutex);
+  return waiters;
+}
+
 void*
 channel_read (channel_t *channel)
 {
   pthread_mutex_lock(&channel->mutex);
   while (!vector_count(channel->queue))
+  {
+    channel->waiters++;
     pthread_cond_wait(&channel->cond, &channel->mutex);
+    channel->waiters--;
+  }
   void *ptr = vector_shift(channel->queue);
+  pthread_mutex_unlock(&channel->mutex);
+  return ptr;
+}
+
+void*
+channel_try_read (channel_t *channel)
+{
+  void *ptr = NULL;
+  pthread_mutex_lock(&channel->mutex);
+  if (vector_count(channel->queue))
+    ptr = vector_shift(channel->queue);
   pthread_mutex_unlock(&channel->mutex);
   return ptr;
 }
