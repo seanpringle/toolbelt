@@ -1021,6 +1021,12 @@ vector_shift (vector_t *vector)
   return vector_del(vector, 0);
 }
 
+size_t
+vector_count (vector_t *vector)
+{
+  return vector->count;
+}
+
 struct _list_t;
 typedef void (*list_callback)(struct _list_t*);
 
@@ -2230,7 +2236,7 @@ db_quote_field (db_t *db, const char *field)
 char*
 db_quote_value (db_t *db, const char *value)
 {
-  return str_encode(value, STR_ENCODE_SQL);
+  return str_encode((char*)value, STR_ENCODE_SQL);
 }
 
 void
@@ -2280,6 +2286,215 @@ void
 db_close (db_t *db)
 {
   PQfinish(db->conn);
+}
+
+#endif
+
+#ifdef TOOLBELT_THREAD
+
+#include <pthread.h>
+
+typedef struct _channel_t {
+  pthread_mutex_t mutex;
+  pthread_cond_t cond;
+  vector_t *queue;
+} channel_t;
+
+channel_t*
+channel_create ()
+{
+  channel_t *channel = allocate(sizeof(channel_t));
+  pthread_mutex_init(&channel->mutex, NULL);
+  pthread_cond_init(&channel->cond, NULL);
+  channel->queue = vector_create();
+  return channel;
+}
+
+void
+channel_free (channel_t *channel)
+{
+  pthread_mutex_lock(&channel->mutex);
+  pthread_mutex_destroy(&channel->mutex);
+  pthread_cond_destroy(&channel->cond);
+  vector_free(channel->queue);
+  free(channel);
+}
+
+void
+channel_write (channel_t *channel, void *ptr)
+{
+  pthread_mutex_lock(&channel->mutex);
+  vector_push(channel->queue, ptr);
+  pthread_cond_signal(&channel->cond);
+  pthread_mutex_unlock(&channel->mutex);
+}
+
+void*
+channel_read (channel_t *channel)
+{
+  pthread_mutex_lock(&channel->mutex);
+  while (!vector_count(channel->queue))
+    pthread_cond_wait(&channel->cond, &channel->mutex);
+  void *ptr = vector_shift(channel->queue);
+  pthread_mutex_unlock(&channel->mutex);
+  return ptr;
+}
+
+typedef int (*thread_main)(void*);
+
+typedef struct _thread_t {
+  pthread_t pthread;
+  pthread_mutex_t mutex;
+  thread_main main;
+  void *payload;
+  off_t id;
+  int started;
+  int stopped;
+  int joined;
+  int error;
+} thread_t;
+
+static pthread_key_t _key_self;
+#define self ((thread_t*)pthread_getspecific(_key_self))
+
+pthread_mutex_t all_threads_mutex;
+vector_t *all_threads;
+
+int
+thread_join (thread_t *thread)
+{
+  int ok = 1;
+
+  if (thread->started && !thread->joined)
+  {
+    pthread_mutex_unlock(&thread->mutex);
+    int rc = pthread_join(thread->pthread, NULL);
+    pthread_mutex_lock(&thread->mutex);
+    if (rc)
+      thread->joined = 1;
+    else
+    {
+      errorf("thread_run (join): %d", rc);
+      ok = 0;
+    }
+  }
+  return ok;
+}
+
+thread_t*
+thread_create ()
+{
+  pthread_mutex_lock(&all_threads_mutex);
+
+  vector_each(all_threads, thread_t *t)
+  {
+    pthread_mutex_lock(&t->mutex);
+    if (t->stopped)
+    {
+      thread_join(t);
+      pthread_mutex_unlock(&all_threads_mutex);
+      return t;
+    }
+    pthread_mutex_unlock(&t->mutex);
+  }
+
+  thread_t *thread = allocate(sizeof(thread_t));
+  memset(thread, 0, sizeof(thread_t));
+  pthread_mutex_init(&thread->mutex, NULL);
+
+  thread->id = vector_count(all_threads);
+  vector_push(all_threads, thread);
+
+  pthread_mutex_unlock(&all_threads_mutex);
+  return thread;
+}
+
+void*
+thread_run (void *ptr)
+{
+  thread_t *thread = (thread_t*)ptr;
+  pthread_setspecific(_key_self, thread);
+
+  int error = thread->main(thread->payload);
+
+  pthread_mutex_lock(&thread->mutex);
+  thread->error = error;
+  thread->stopped = 1;
+  pthread_mutex_unlock(&thread->mutex);
+  return NULL;
+}
+
+int
+thread_start (thread_t *thread, thread_main main, void *payload)
+{
+  pthread_mutex_lock(&thread->mutex);
+
+  thread_join(thread);
+
+  thread->main    = main;
+  thread->payload = payload;
+  thread->started = 1;
+  thread->stopped = 0;
+  thread->joined  = 0;
+
+  pthread_mutex_unlock(&thread->mutex);
+
+  int rc = pthread_create(&thread->pthread, NULL, thread_run, thread);
+
+  if (rc)
+  {
+    errorf("thread_start (create): %d", rc);
+    return 0;
+  }
+  return 1;
+}
+
+int
+thread_wait (thread_t *thread)
+{
+  pthread_mutex_lock(&thread->mutex);
+  thread_join(thread);
+  int rc = thread->error;
+  pthread_mutex_unlock(&thread->mutex);
+  return rc;
+}
+
+void
+thread_free (thread_t *thread)
+{
+  vector_del(all_threads, thread->id);
+  pthread_mutex_destroy(&thread->mutex);
+  free(thread);
+}
+
+void
+multithreaded ()
+{
+  pthread_key_create(&_key_self, NULL);
+  pthread_mutex_init(&all_threads_mutex, NULL);
+  all_threads = vector_create();
+}
+
+void
+singlethreaded ()
+{
+  pthread_mutex_lock(&all_threads_mutex);
+
+  vector_each(all_threads, thread_t *thread)
+  {
+    pthread_mutex_lock(&thread->mutex);
+    thread_join(thread);
+    thread_free(thread);
+  }
+  vector_free(all_threads);
+  all_threads = NULL;
+
+  int rc = pthread_key_delete(_key_self);
+
+  if (rc != 0)
+    errorf("singlethreaded (key delete): %d", rc);
+
+  pthread_mutex_destroy(&all_threads_mutex);
 }
 
 #endif
