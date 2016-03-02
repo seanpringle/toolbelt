@@ -2498,25 +2498,45 @@ channel_write (channel_t *channel, void *ptr)
   {
     vector_each(channel->readers, thread_t *thread)
     {
-      if (pthread_mutex_lock(&thread->mutex) == 0)
+      pthread_mutex_lock(&thread->mutex);
+
+      if (thread->waiting)
       {
-        if (thread->waiting)
-        {
-          thread->channel = channel;
-          thread->ptr     = ptr;
-          thread->waiting = 0;
-          pthread_cond_signal(&thread->cond);
-          pthread_mutex_unlock(&thread->mutex);
-          dispatched = 1;
-        }
+        thread->channel = channel;
+        thread->ptr     = ptr;
+        thread->waiting = 0;
+        pthread_cond_signal(&thread->cond);
         pthread_mutex_unlock(&thread->mutex);
+        dispatched = 1;
+        break;
       }
-      if (dispatched) break;
+      pthread_mutex_unlock(&thread->mutex);
     }
+    usleep(1);
   }
   if (!dispatched)
   {
     vector_push(channel->queue, ptr);
+  }
+  pthread_mutex_unlock(&channel->mutex);
+}
+
+void
+channel_broadcast (channel_t *channel, void ptr)
+{
+  pthread_mutex_lock(&channel->mutex);
+
+  vector_each(channel->readers, thread_t *thread)
+  {
+    pthread_mutex_lock(&thread->mutex)
+    if (thread->waiting)
+    {
+      thread->channel = channel;
+      thread->ptr     = ptr;
+      thread->waiting = 0;
+      pthread_cond_signal(&thread->cond);
+    }
+    pthread_mutex_unlock(&thread->mutex);
   }
   pthread_mutex_unlock(&channel->mutex);
 }
