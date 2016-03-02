@@ -2522,13 +2522,13 @@ channel_write (channel_t *channel, void *ptr)
 }
 
 void
-channel_broadcast (channel_t *channel, void ptr)
+channel_broadcast (channel_t *channel, void *ptr)
 {
   pthread_mutex_lock(&channel->mutex);
 
   vector_each(channel->readers, thread_t *thread)
   {
-    pthread_mutex_lock(&thread->mutex)
+    pthread_mutex_lock(&thread->mutex);
     if (thread->waiting)
     {
       thread->channel = channel;
