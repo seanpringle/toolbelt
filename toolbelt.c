@@ -2299,6 +2299,7 @@ typedef struct _channel_t {
   pthread_cond_t cond;
   vector_t *queue;
   size_t waiters;
+  size_t handled;
 } channel_t;
 
 channel_t*
@@ -2309,6 +2310,7 @@ channel_create ()
   pthread_cond_init(&channel->cond, NULL);
   channel->queue = vector_create();
   channel->waiters = 0;
+  channel->handled = 0;
   return channel;
 }
 
@@ -2327,6 +2329,7 @@ channel_write (channel_t *channel, void *ptr)
 {
   pthread_mutex_lock(&channel->mutex);
   vector_push(channel->queue, ptr);
+  channel->handled++;
   pthread_cond_signal(&channel->cond);
   pthread_mutex_unlock(&channel->mutex);
 }
@@ -2347,6 +2350,15 @@ channel_waiters (channel_t *channel)
   size_t waiters = channel->waiters;
   pthread_mutex_unlock(&channel->mutex);
   return waiters;
+}
+
+size_t
+channel_handled (channel_t *channel)
+{
+  pthread_mutex_lock(&channel->mutex);
+  size_t handled = channel->handled;
+  pthread_mutex_unlock(&channel->mutex);
+  return handled;
 }
 
 void*
