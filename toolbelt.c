@@ -2505,6 +2505,7 @@ channel_write (channel_t *channel, void *ptr)
         thread->channel = channel;
         thread->ptr     = ptr;
         thread->waiting = 0;
+        vector_del(channel->readers, loop.index);
         pthread_cond_signal(&thread->cond);
         pthread_mutex_unlock(&thread->mutex);
         dispatched = 1;
@@ -2512,7 +2513,12 @@ channel_write (channel_t *channel, void *ptr)
       }
       pthread_mutex_unlock(&thread->mutex);
     }
-    usleep(1);
+    if (!dispatched)
+    {
+      pthread_mutex_unlock(&channel->mutex);
+      usleep(1);
+      pthread_mutex_lock(&channel->mutex);
+    }
   }
   if (!dispatched)
   {
@@ -2552,10 +2558,25 @@ channel_try_read (channel_t *channel)
   return ptr;
 }
 
+vector_t*
+channel_consume (channel_t *channel)
+{
+  vector_t *consume = NULL;
+  pthread_mutex_lock(&channel->mutex);
+  if (vector_count(channel->queue))
+  {
+    consume = channel->queue;
+    channel->queue = vector_create();
+  }
+  pthread_mutex_unlock(&channel->mutex);
+  return consume;
+}
+
 void*
 channel_multi_read (channel_t **selected, vector_t *channels)
 {
   void *ptr = NULL;
+  channel_t *from = NULL;
 
   int waiting_channels = 0;
   vector_each(channels, channel_t *channel)
@@ -2564,7 +2585,7 @@ channel_multi_read (channel_t **selected, vector_t *channels)
     if (vector_count(channel->queue))
     {
       ptr = vector_shift(channel->queue);
-      if (selected) *selected = channel;
+      from = channel;
     }
     else
     {
@@ -2582,12 +2603,13 @@ channel_multi_read (channel_t **selected, vector_t *channels)
     pthread_cond_wait(&self->cond, &self->mutex);
     pthread_mutex_unlock(&self->mutex);
     ptr = self->ptr;
-    if (selected) *selected = self->channel;
+    from = self->channel;
   }
 
   vector_each(channels, channel_t *channel)
   {
     if (loop.index == waiting_channels) break;
+    if (channel == from) continue;
 
     pthread_mutex_lock(&channel->mutex);
     int slot = -1;
@@ -2604,6 +2626,7 @@ channel_multi_read (channel_t **selected, vector_t *channels)
     pthread_mutex_unlock(&channel->mutex);
   }
 
+  if (selected) *selected = from;
   return ptr;
 }
 
