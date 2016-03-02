@@ -2294,100 +2294,14 @@ db_close (db_t *db)
 
 #include <pthread.h>
 
+typedef int (*thread_main)(void*);
+
 typedef struct _channel_t {
   pthread_mutex_t mutex;
-  pthread_cond_t cond;
   vector_t *queue;
-  size_t waiters;
+  vector_t *readers;
   size_t handled;
 } channel_t;
-
-channel_t*
-channel_create ()
-{
-  channel_t *channel = allocate(sizeof(channel_t));
-  pthread_mutex_init(&channel->mutex, NULL);
-  pthread_cond_init(&channel->cond, NULL);
-  channel->queue = vector_create();
-  channel->waiters = 0;
-  channel->handled = 0;
-  return channel;
-}
-
-void
-channel_free (channel_t *channel)
-{
-  pthread_mutex_lock(&channel->mutex);
-  pthread_mutex_destroy(&channel->mutex);
-  pthread_cond_destroy(&channel->cond);
-  vector_free(channel->queue);
-  free(channel);
-}
-
-void
-channel_write (channel_t *channel, void *ptr)
-{
-  pthread_mutex_lock(&channel->mutex);
-  vector_push(channel->queue, ptr);
-  channel->handled++;
-  pthread_cond_signal(&channel->cond);
-  pthread_mutex_unlock(&channel->mutex);
-}
-
-size_t
-channel_backlog (channel_t *channel)
-{
-  pthread_mutex_lock(&channel->mutex);
-  size_t backlog = vector_count(channel->queue);
-  pthread_mutex_unlock(&channel->mutex);
-  return backlog;
-}
-
-size_t
-channel_waiters (channel_t *channel)
-{
-  pthread_mutex_lock(&channel->mutex);
-  size_t waiters = channel->waiters;
-  pthread_mutex_unlock(&channel->mutex);
-  return waiters;
-}
-
-size_t
-channel_handled (channel_t *channel)
-{
-  pthread_mutex_lock(&channel->mutex);
-  size_t handled = channel->handled;
-  pthread_mutex_unlock(&channel->mutex);
-  return handled;
-}
-
-void*
-channel_read (channel_t *channel)
-{
-  pthread_mutex_lock(&channel->mutex);
-  while (!vector_count(channel->queue))
-  {
-    channel->waiters++;
-    pthread_cond_wait(&channel->cond, &channel->mutex);
-    channel->waiters--;
-  }
-  void *ptr = vector_shift(channel->queue);
-  pthread_mutex_unlock(&channel->mutex);
-  return ptr;
-}
-
-void*
-channel_try_read (channel_t *channel)
-{
-  void *ptr = NULL;
-  pthread_mutex_lock(&channel->mutex);
-  if (vector_count(channel->queue))
-    ptr = vector_shift(channel->queue);
-  pthread_mutex_unlock(&channel->mutex);
-  return ptr;
-}
-
-typedef int (*thread_main)(void*);
 
 typedef struct _thread_t {
   pthread_t pthread;
@@ -2399,6 +2313,10 @@ typedef struct _thread_t {
   int stopped;
   int joined;
   int error;
+  int waiting;
+  pthread_cond_t cond;
+  channel_t *channel;
+  void *ptr;
 } thread_t;
 
 static pthread_key_t _key_self;
@@ -2448,6 +2366,7 @@ thread_create ()
   thread_t *thread = allocate(sizeof(thread_t));
   memset(thread, 0, sizeof(thread_t));
   pthread_mutex_init(&thread->mutex, NULL);
+  pthread_cond_init(&thread->cond, NULL);
 
   thread->id = vector_count(all_threads);
   vector_push(all_threads, thread);
@@ -2483,6 +2402,7 @@ thread_start (thread_t *thread, thread_main main, void *payload)
   thread->started = 1;
   thread->stopped = 0;
   thread->joined  = 0;
+  thread->waiting = 0;
 
   pthread_mutex_unlock(&thread->mutex);
 
@@ -2511,6 +2431,7 @@ thread_free (thread_t *thread)
 {
   vector_del(all_threads, thread->id);
   pthread_mutex_destroy(&thread->mutex);
+  pthread_cond_destroy(&thread->cond);
   free(thread);
 }
 
@@ -2542,6 +2463,181 @@ singlethreaded ()
     errorf("singlethreaded (key delete): %d", rc);
 
   pthread_mutex_destroy(&all_threads_mutex);
+}
+
+channel_t*
+channel_create ()
+{
+  channel_t *channel = allocate(sizeof(channel_t));
+  pthread_mutex_init(&channel->mutex, NULL);
+  channel->queue = vector_create();
+  channel->readers = vector_create();
+  channel->handled = 0;
+  return channel;
+}
+
+void
+channel_free (channel_t *channel)
+{
+  pthread_mutex_lock(&channel->mutex);
+  pthread_mutex_destroy(&channel->mutex);
+  vector_free(channel->queue);
+  vector_free(channel->readers);
+  free(channel);
+}
+
+void
+channel_write (channel_t *channel, void *ptr)
+{
+  pthread_mutex_lock(&channel->mutex);
+  channel->handled++;
+
+  int dispatched = 0;
+
+  while (!dispatched && vector_count(channel->readers))
+  {
+    vector_each(channel->readers, thread_t *thread)
+    {
+      if (pthread_mutex_lock(&thread->mutex) == 0)
+      {
+        if (thread->waiting)
+        {
+          thread->channel = channel;
+          thread->ptr     = ptr;
+          thread->waiting = 0;
+          pthread_cond_signal(&thread->cond);
+          pthread_mutex_unlock(&thread->mutex);
+          dispatched = 1;
+        }
+        pthread_mutex_unlock(&thread->mutex);
+      }
+      if (dispatched) break;
+    }
+  }
+  if (!dispatched)
+  {
+    vector_push(channel->queue, ptr);
+  }
+  pthread_mutex_unlock(&channel->mutex);
+}
+
+void*
+channel_try_read (channel_t *channel)
+{
+  void *ptr = NULL;
+  pthread_mutex_lock(&channel->mutex);
+  if (vector_count(channel->queue))
+    ptr = vector_shift(channel->queue);
+  pthread_mutex_unlock(&channel->mutex);
+  return ptr;
+}
+
+void*
+channel_multi_read (channel_t **selected, vector_t *channels)
+{
+  void *ptr = NULL;
+
+  int waiting_channels = 0;
+  vector_each(channels, channel_t *channel)
+  {
+    pthread_mutex_lock(&channel->mutex);
+    if (vector_count(channel->queue))
+    {
+      ptr = vector_shift(channel->queue);
+      if (selected) *selected = channel;
+    }
+    else
+    {
+      vector_push(channel->readers, self);
+      waiting_channels++;
+    }
+    pthread_mutex_unlock(&channel->mutex);
+    if (ptr) break;
+  }
+
+  if (!ptr)
+  {
+    pthread_mutex_lock(&self->mutex);
+    self->waiting = 1;
+    pthread_cond_wait(&self->cond, &self->mutex);
+    pthread_mutex_unlock(&self->mutex);
+    ptr = self->ptr;
+    if (selected) *selected = self->channel;
+  }
+
+  vector_each(channels, channel_t *channel)
+  {
+    if (loop.index == waiting_channels) break;
+
+    pthread_mutex_lock(&channel->mutex);
+    int slot = -1;
+    vector_each(channel->readers, thread_t *thread)
+    {
+      if (thread == self)
+        slot = loop.index;
+    }
+    if (slot >= 0)
+    {
+      vector_del(channel->readers, slot);
+    }
+
+    pthread_mutex_unlock(&channel->mutex);
+  }
+
+  return ptr;
+}
+
+void*
+channel_select (channel_t **selected, int n, ...)
+{
+  va_list args;
+  va_start(args, n);
+
+  vector_t *channels = vector_create();
+
+  for (int i = 0; i < n; i++)
+    vector_push(channels, va_arg(args, channel_t*));
+
+  va_end(args);
+
+  void *ptr = channel_multi_read (selected, channels);
+
+  vector_free(channels);
+
+  return ptr;
+}
+
+void*
+channel_read (channel_t *channel)
+{
+  return channel_select(NULL, 1, channel);
+}
+
+size_t
+channel_backlog (channel_t *channel)
+{
+  pthread_mutex_lock(&channel->mutex);
+  size_t backlog = vector_count(channel->queue);
+  pthread_mutex_unlock(&channel->mutex);
+  return backlog;
+}
+
+size_t
+channel_readers (channel_t *channel)
+{
+  pthread_mutex_lock(&channel->mutex);
+  size_t readers = vector_count(channel->readers);
+  pthread_mutex_unlock(&channel->mutex);
+  return readers;
+}
+
+size_t
+channel_handled (channel_t *channel)
+{
+  pthread_mutex_lock(&channel->mutex);
+  size_t handled = channel->handled;
+  pthread_mutex_unlock(&channel->mutex);
+  return handled;
 }
 
 #endif
