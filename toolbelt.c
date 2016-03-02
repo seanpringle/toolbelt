@@ -2128,3 +2128,158 @@ pool_free_chunk (pool_t *pool, off_t pos, size_t bytes)
     pool_free(pool, pos + (i * pool->head->osize));
 }
 
+#ifdef TOOLBELT_DB
+
+#include <postgresql/libpq-fe.h>
+
+typedef struct _db_t {
+  PGconn *conn;
+} db_t;
+
+typedef struct _dbr_t {
+  db_t *db;
+  PGresult *res;
+  size_t affected;
+  size_t selected;
+  size_t fetched;
+  size_t fields;
+} dbr_t;
+
+void
+dbr_clear (dbr_t *dbr)
+{
+  PQclear(dbr->res);
+}
+
+void
+dbr_free (dbr_t *dbr)
+{
+  dbr_clear(dbr);
+  free(dbr);
+}
+
+size_t
+dbr_selected (dbr_t *dbr)
+{
+  return dbr->selected;
+}
+
+map_t*
+dbr_fetch_map (dbr_t *dbr)
+{
+  if (dbr->fetched == dbr->selected)
+    return NULL;
+
+  map_t *row = map_create();
+
+  for (size_t i = 0; i < dbr->fields; i++)
+  {
+    char *key = PQfname(dbr->res, i);
+    char *val = PQgetisnull(dbr->res, dbr->fetched, i) ? NULL: PQgetvalue(dbr->res, dbr->fetched, i);
+    map_set(row, key, val);
+  }
+  dbr->fetched++;
+  return row;
+}
+
+array_t*
+dbr_fetch_array (dbr_t *dbr)
+{
+  if (dbr->fetched == dbr->selected)
+    return NULL;
+
+  array_t *row = array_create(dbr->fields);
+
+  for (size_t i = 0; i < dbr->fields; i++)
+  {
+    char *val = PQgetisnull(dbr->res, dbr->fetched, i) ? NULL: PQgetvalue(dbr->res, dbr->fetched, i);
+    array_set(row, i, val);
+  }
+  dbr->fetched++;
+  return row;
+}
+
+dbr_t*
+db_query (db_t *db, const char *query)
+{
+  dbr_t *dbr = allocate(sizeof(dbr_t));
+  dbr->res = PQexec(db->conn, query);
+
+  ExecStatusType rs = PQresultStatus(dbr->res);
+
+  if (rs != PGRES_TUPLES_OK && rs != PGRES_SINGLE_TUPLE && rs != PGRES_COMMAND_OK)
+  {
+    errorf("PostgresSQL query failed: %s", PQresultErrorMessage(dbr->res));
+    dbr_free(dbr);
+    return NULL;
+  }
+
+  dbr->affected = strtoll(PQcmdTuples(dbr->res), NULL, 0);
+  dbr->selected = PQntuples(dbr->res);
+  dbr->fetched  = 0;
+  dbr->fields   = PQnfields(dbr->res);
+  return dbr;
+}
+
+char*
+db_quote_field (db_t *db, const char *field)
+{
+  return strchr(field, '.') ? mprintf("%s", field) : mprintf("\"%s\"", field);
+}
+
+char*
+db_quote_value (db_t *db, const char *value)
+{
+  return str_encode(value, STR_ENCODE_SQL);
+}
+
+void
+db_begin (db_t *db)
+{
+  dbr_free(db_query(db, "begin"));
+}
+
+void
+db_commit (db_t *db)
+{
+  dbr_free(db_query(db, "commit"));
+}
+
+void
+db_rollback (db_t *db)
+{
+  dbr_free(db_query(db, "rollback"));
+}
+
+void
+db_command (db_t *db, const char *query)
+{
+  dbr_free(db_query(db, query));
+}
+
+int
+db_connect (db_t *db, const char *dbhost, const char *dbname, const char *dbuser, const char *dbpass)
+{
+  text_t *info = textf("host=%s dbname=%s user=%s password=%s",
+    dbhost, dbname, dbuser, dbpass
+  );
+
+  db->conn = PQconnectdb(text_get(info));
+
+  text_free(info);
+
+  if (PQstatus(db->conn) != CONNECTION_OK)
+  {
+    errorf("PostgresSQL connect failed: %s", PQerrorMessage(db->conn));
+    return 0;
+  }
+  return 1;
+}
+
+void
+db_close (db_t *db)
+{
+  PQfinish(db->conn);
+}
+
+#endif
