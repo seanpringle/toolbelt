@@ -76,7 +76,7 @@ mfgets (FILE *file)
 }
 
 char*
-mprintf (char *pattern, ...)
+strf (char *pattern, ...)
 {
   char *result = NULL;
   va_list args;
@@ -112,8 +112,6 @@ int str_lt  (char *a, char *b) { return  strcmp(a, b) <  0; }
 int str_lte (char *a, char *b) { return  strcmp(a, b) <= 0; }
 int str_gt  (char *a, char *b) { return  strcmp(a, b) >  0; }
 int str_gte (char *a, char *b) { return  strcmp(a, b) >= 0; }
-
-#define strf(...) mprintf(__VA_ARGS__)
 
 int
 str_skip (char *s, str_cb_ischar cb)
@@ -225,26 +223,26 @@ str_encode (char *s, int format)
   else
   if (format == STR_ENCODE_DQUOTE)
   {
-    result = mprintf("\"");
+    result = strf("\"");
     char *change = NULL;
 
     str_each(s, char c)
     {
-           if (c == 0x07) change = mprintf("%s\\a", result);
-      else if (c == 0x08) change = mprintf("%s\\b", result);
-      else if (c == 0x0c) change = mprintf("%s\\f", result);
-      else if (c == 0x0a) change = mprintf("%s\\n", result);
-      else if (c == 0x0d) change = mprintf("%s\\r", result);
-      else if (c == 0x09) change = mprintf("%s\\t", result);
-      else if (c == 0x0B) change = mprintf("%s\\v", result);
-      else if (c == '\\') change = mprintf("%s\\\\", result);
-      else if (c ==  '"') change = mprintf("%s\\\"", result);
-      else                change = mprintf("%s%c", result, c);
+           if (c == 0x07) change = strf("%s\\a", result);
+      else if (c == 0x08) change = strf("%s\\b", result);
+      else if (c == 0x0c) change = strf("%s\\f", result);
+      else if (c == 0x0a) change = strf("%s\\n", result);
+      else if (c == 0x0d) change = strf("%s\\r", result);
+      else if (c == 0x09) change = strf("%s\\t", result);
+      else if (c == 0x0B) change = strf("%s\\v", result);
+      else if (c == '\\') change = strf("%s\\\\", result);
+      else if (c ==  '"') change = strf("%s\\\"", result);
+      else                change = strf("%s%c", result, c);
 
       free(result);
       result = change;
     }
-    change = mprintf("%s\"", result);
+    change = strf("%s\"", result);
     free(result);
     result = change;
   }
@@ -2288,7 +2286,7 @@ db_query (db_t *db, const char *query)
 char*
 db_quote_field (db_t *db, const char *field)
 {
-  return strchr(field, '.') ? mprintf("%s", field) : mprintf("\"%s\"", field);
+  return strchr(field, '.') ? strf("%s", field) : strf("\"%s\"", field);
 }
 
 char*
