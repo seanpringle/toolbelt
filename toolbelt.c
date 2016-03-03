@@ -99,7 +99,7 @@ typedef struct { off_t index; char *subject; int l1; } str_each_t;
 
 #define str_each(l,_val_) for ( \
   str_each_t loop = { 0, (l), 0 }; \
-    !loop.l1 && loop.subject[loop.index] && (loop.l1 = 1); \
+    loop.subject && !loop.l1 && loop.subject[loop.index] && (loop.l1 = 1); \
     loop.index++ \
   ) \
     for (_val_ = loop.subject[loop.index]; loop.l1; loop.l1 = !loop.l1)
@@ -804,7 +804,7 @@ typedef struct { off_t index; array_t *array; int l1; } array_each_t;
 
 #define array_each(l,_val_) for ( \
   array_each_t loop = { 0, (l), 0 }; \
-    loop.index < loop.array->width && !loop.l1 && (loop.l1 = 1); \
+    loop.array && loop.index < loop.array->width && !loop.l1 && (loop.l1 = 1); \
     loop.index++ \
   ) \
     for (_val_ = loop.array->items[loop.index]; loop.l1; loop.l1 = !loop.l1)
@@ -855,8 +855,11 @@ array_clear (array_t *array)
 void
 array_free (array_t *array)
 {
-  array_clear(array);
-  free(array);
+  if (array)
+  {
+    array_clear(array);
+    free(array);
+  }
 }
 
 void*
@@ -895,7 +898,7 @@ typedef struct { off_t index; vector_t *vector; int l1; } vector_each_t;
 
 #define vector_each(l,_val_) for ( \
   vector_each_t loop = { 0, (l), 0 }; \
-    loop.index < loop.vector->count && !loop.l1 && (loop.l1 = 1); \
+    loop.vector && loop.index < loop.vector->count && !loop.l1 && (loop.l1 = 1); \
     loop.index++ \
   ) \
     for (_val_ = loop.vector->items[loop.index]; loop.l1; loop.l1 = !loop.l1)
@@ -945,8 +948,11 @@ vector_clear (vector_t *vector)
 void
 vector_free (vector_t *vector)
 {
-  vector_clear(vector);
-  free(vector);
+  if (vector)
+  {
+    vector_clear(vector);
+    free(vector);
+  }
 }
 
 void
@@ -1032,11 +1038,12 @@ typedef void (*list_callback)(struct _list_t*);
 
 typedef struct _list_node_t {
   void *val;
-  struct _list_node_t *next;
+  struct _list_node_t *next, *prev;
 } list_node_t;
 
 typedef struct _list_t {
-  list_node_t *nodes;
+  list_node_t *first;
+  list_node_t *last;
   size_t count;
   list_callback clear;
 } list_t;
@@ -1044,50 +1051,81 @@ typedef struct _list_t {
 list_node_t*
 list_next (list_t *list, list_node_t *node)
 {
-  return node ? node->next: list->nodes;
+  return node ? node->next: list->first;
 }
 
 typedef struct { off_t index; list_t *list; list_node_t *node; int l1; } list_each_t;
 
 #define list_each(l,_val_) for ( \
   list_each_t loop = { 0, (l), NULL, 0 }; \
-    !loop.l1 && (loop.node = list_next(loop.list, loop.node)) && (loop.l1 = 1); \
+    loop.list && !loop.l1 && (loop.node = list_next(loop.list, loop.node)) && (loop.l1 = 1); \
     loop.index++ \
   ) \
     for (_val_ = loop.node->val; loop.l1; loop.l1 = !loop.l1)
 
+list_node_t*
+list_find (list_t *list, off_t position)
+{
+  position = min(list->count, position);
+  list_node_t *node = list->first;
+  for (off_t i = 0; node && i < position; i++)
+    node = node->next;
+  return node;
+}
+
 void
 list_ins (list_t *list, off_t position, void *val)
 {
-  list_node_t **prev = &list->nodes;
-  for (
-    off_t i = 0;
-    *prev && i < position;
-    prev = &((*prev)->next), i++
-  );
+  position = min(list->count, position);
+
   list_node_t *node = allocate(sizeof(list_node_t));
-  node->val = val;
-  node->next = *prev;
-  *prev = node;
+  node->val  = val;
+  node->prev = NULL;
+  node->next = NULL;
+
+  if (position == 0)
+  {
+    if (list->first)
+      list->first->prev = node;
+    node->next = list->first;
+    list->first = node;
+    if (!list->last)
+      list->last = node;
+  }
+  else
+  if (position == list->count)
+  {
+    if (list->last)
+      list->last->next = node;
+    node->prev = list->last;
+    list->last = node;
+  }
+  else
+  {
+    list_node_t *current = list_find(list, position);
+    node->next = current;
+    node->prev = current->prev;
+    current->prev = node;
+  }
   list->count++;
 }
 
 int
 list_set (list_t *list, off_t position, void *val)
 {
-  int rc = 1;
-  list_node_t *node = list->nodes;
-  for (
-    off_t i = 0;
-    node && i < position;
-    node = node->next, i++
-  );
-  if (!node)
+  int rc = 0;
+  list_node_t *current = list_find(list, position);
+
+  if (current)
+  {
+    current->val = val;
+    rc = 1;
+  }
+  else
   {
     list_ins(list, position, val);
     rc = 2;
   }
-  node->val = val;
   return rc;
 }
 
@@ -1095,18 +1133,23 @@ void*
 list_del (list_t *list, off_t position)
 {
   void *val = NULL;
-  list_node_t **prev = &list->nodes;
-  for (
-    off_t i = 0;
-    *prev && i < position;
-    prev = &((*prev)->next), i++
-  );
-  if (*prev)
+  list_node_t *current = list_find(list, position);
+
+  if (current)
   {
-    list_node_t *node = *prev;
-    val = node->val;
-    *prev = node->next;
-    free(node);
+    val = current->val;
+
+    if (current->prev)
+      current->prev->next = current->next;
+    else
+      list->first = current->next;
+
+    if (current->next)
+      current->next->prev = current->prev;
+    else
+      list->last = current->prev;
+
+    free(current);
     list->count--;
   }
   return val;
@@ -1115,10 +1158,8 @@ list_del (list_t *list, off_t position)
 void*
 list_get (list_t *list, off_t position)
 {
-  list_each(list, void *val)
-    if (loop.index == position)
-      return val;
-  return NULL;
+  list_node_t *node = list_find(list, position);
+  return node ? node->val: NULL;
 }
 
 void
@@ -1139,20 +1180,25 @@ void
 list_clear (list_t *list)
 {
   if (list->clear) list->clear(list);
-  while (list->nodes)
+  while (list->first)
   {
-    list_node_t *node = list->nodes;
-    list->nodes = node->next;
+    list_node_t *node = list->first;
+    list->first = node->next;
     free(node);
   }
   list->count = 0;
+  list->first = NULL;
+  list->last  = NULL;
 }
 
 void
 list_free (list_t *list)
 {
-  list_clear(list);
-  free(list);
+  if (list)
+  {
+    list_clear(list);
+    free(list);
+  }
 }
 
 size_t
@@ -1264,7 +1310,7 @@ typedef struct { off_t index; map_t *map; map_node_t *node; int l1; int l2; } ma
 
 #define map_each(l,_key_,_val_) for ( \
   map_each_t loop = { 0, (l), NULL, 0, 0 }; \
-    !loop.l1 && !loop.l2 && (loop.node = map_next(loop.map, loop.node)) && (loop.l1 = 1) && (loop.l2 = 1); \
+    loop.map && !loop.l1 && !loop.l2 && (loop.node = map_next(loop.map, loop.node)) && (loop.l1 = 1) && (loop.l2 = 1); \
     loop.index++ \
   ) \
     for (_key_ = loop.node->key; loop.l1; loop.l1 = !loop.l1) \
@@ -1274,7 +1320,7 @@ typedef struct { off_t index; map_t *map; map_node_t *node; int l1; } map_each_k
 
 #define map_each_key(l,_key_) for ( \
   map_each_key_t loop = { 0, (l), NULL, 0 }; \
-    !loop.l1 && (loop.node = map_next(loop.map, loop.node)) && (loop.l1 = 1); \
+    loop.map && !loop.l1 && (loop.node = map_next(loop.map, loop.node)) && (loop.l1 = 1); \
     loop.index++ \
   ) \
     for (_key_ = loop.node->key; loop.l1; loop.l1 = !loop.l1)
@@ -1283,7 +1329,7 @@ typedef struct { off_t index; map_t *map; map_node_t *node; int l1; } map_each_v
 
 #define map_each_val(l,_val_) for ( \
   map_each_val_t loop = { 0, (l), NULL, 0 }; \
-    !loop.l1 && (loop.node = map_next(loop.map, loop.node)) && (loop.l1 = 1); \
+    loop.map && !loop.l1 && (loop.node = map_next(loop.map, loop.node)) && (loop.l1 = 1); \
     loop.index++ \
   ) \
     for (_val_ = loop.node->val; loop.l1; loop.l1 = !loop.l1)
@@ -1500,8 +1546,11 @@ map_clear (map_t *map)
 void
 map_free (map_t *map)
 {
-  map_clear(map);
-  free(map);
+  if (map)
+  {
+    map_clear(map);
+    free(map);
+  }
 }
 
 size_t
@@ -2298,8 +2347,8 @@ typedef int (*thread_main)(void*);
 
 typedef struct _channel_t {
   pthread_mutex_t mutex;
-  vector_t *queue;
-  vector_t *readers;
+  list_t *queue;
+  list_t *readers;
   size_t handled;
 } channel_t;
 
@@ -2470,8 +2519,8 @@ channel_create ()
 {
   channel_t *channel = allocate(sizeof(channel_t));
   pthread_mutex_init(&channel->mutex, NULL);
-  channel->queue = vector_create();
-  channel->readers = vector_create();
+  channel->queue = list_create();
+  channel->readers = list_create();
   channel->handled = 0;
   return channel;
 }
@@ -2481,8 +2530,8 @@ channel_free (channel_t *channel)
 {
   pthread_mutex_lock(&channel->mutex);
   pthread_mutex_destroy(&channel->mutex);
-  vector_free(channel->queue);
-  vector_free(channel->readers);
+  list_free(channel->queue);
+  list_free(channel->readers);
   free(channel);
 }
 
@@ -2494,9 +2543,9 @@ channel_write (channel_t *channel, void *ptr)
 
   int dispatched = 0;
 
-  while (!dispatched && vector_count(channel->readers))
+  while (!dispatched && list_count(channel->readers))
   {
-    vector_each(channel->readers, thread_t *thread)
+    list_each(channel->readers, thread_t *thread)
     {
       pthread_mutex_lock(&thread->mutex);
 
@@ -2505,7 +2554,7 @@ channel_write (channel_t *channel, void *ptr)
         thread->channel = channel;
         thread->ptr     = ptr;
         thread->waiting = 0;
-        vector_del(channel->readers, loop.index);
+        list_del(channel->readers, loop.index);
         pthread_cond_signal(&thread->cond);
         pthread_mutex_unlock(&thread->mutex);
         dispatched = 1;
@@ -2522,7 +2571,7 @@ channel_write (channel_t *channel, void *ptr)
   }
   if (!dispatched)
   {
-    vector_push(channel->queue, ptr);
+    list_push(channel->queue, ptr);
   }
   pthread_mutex_unlock(&channel->mutex);
 }
@@ -2532,7 +2581,7 @@ channel_broadcast (channel_t *channel, void *ptr)
 {
   pthread_mutex_lock(&channel->mutex);
 
-  vector_each(channel->readers, thread_t *thread)
+  list_each(channel->readers, thread_t *thread)
   {
     pthread_mutex_lock(&thread->mutex);
     if (thread->waiting)
@@ -2552,44 +2601,44 @@ channel_try_read (channel_t *channel)
 {
   void *ptr = NULL;
   pthread_mutex_lock(&channel->mutex);
-  if (vector_count(channel->queue))
-    ptr = vector_shift(channel->queue);
+  if (list_count(channel->queue))
+    ptr = list_shift(channel->queue);
   pthread_mutex_unlock(&channel->mutex);
   return ptr;
 }
 
-vector_t*
+list_t*
 channel_consume (channel_t *channel)
 {
-  vector_t *consume = NULL;
+  list_t *consume = NULL;
   pthread_mutex_lock(&channel->mutex);
-  if (vector_count(channel->queue))
+  if (list_count(channel->queue))
   {
     consume = channel->queue;
-    channel->queue = vector_create();
+    channel->queue = list_create();
   }
   pthread_mutex_unlock(&channel->mutex);
   return consume;
 }
 
 void*
-channel_multi_read (channel_t **selected, vector_t *channels)
+channel_multi_read (channel_t **selected, list_t *channels)
 {
   void *ptr = NULL;
   channel_t *from = NULL;
 
   int waiting_channels = 0;
-  vector_each(channels, channel_t *channel)
+  list_each(channels, channel_t *channel)
   {
     pthread_mutex_lock(&channel->mutex);
-    if (vector_count(channel->queue))
+    if (list_count(channel->queue))
     {
-      ptr = vector_shift(channel->queue);
+      ptr = list_shift(channel->queue);
       from = channel;
     }
     else
     {
-      vector_push(channel->readers, self);
+      list_push(channel->readers, self);
       waiting_channels++;
     }
     pthread_mutex_unlock(&channel->mutex);
@@ -2606,21 +2655,21 @@ channel_multi_read (channel_t **selected, vector_t *channels)
     from = self->channel;
   }
 
-  vector_each(channels, channel_t *channel)
+  list_each(channels, channel_t *channel)
   {
     if (loop.index == waiting_channels) break;
     if (channel == from) continue;
 
     pthread_mutex_lock(&channel->mutex);
     int slot = -1;
-    vector_each(channel->readers, thread_t *thread)
+    list_each(channel->readers, thread_t *thread)
     {
       if (thread == self)
         slot = loop.index;
     }
     if (slot >= 0)
     {
-      vector_del(channel->readers, slot);
+      list_del(channel->readers, slot);
     }
 
     pthread_mutex_unlock(&channel->mutex);
@@ -2636,16 +2685,16 @@ channel_select (channel_t **selected, int n, ...)
   va_list args;
   va_start(args, n);
 
-  vector_t *channels = vector_create();
+  list_t *channels = list_create();
 
   for (int i = 0; i < n; i++)
-    vector_push(channels, va_arg(args, channel_t*));
+    list_push(channels, va_arg(args, channel_t*));
 
   va_end(args);
 
   void *ptr = channel_multi_read (selected, channels);
 
-  vector_free(channels);
+  list_free(channels);
 
   return ptr;
 }
@@ -2660,7 +2709,7 @@ size_t
 channel_backlog (channel_t *channel)
 {
   pthread_mutex_lock(&channel->mutex);
-  size_t backlog = vector_count(channel->queue);
+  size_t backlog = list_count(channel->queue);
   pthread_mutex_unlock(&channel->mutex);
   return backlog;
 }
@@ -2669,7 +2718,7 @@ size_t
 channel_readers (channel_t *channel)
 {
   pthread_mutex_lock(&channel->mutex);
-  size_t readers = vector_count(channel->readers);
+  size_t readers = list_count(channel->readers);
   pthread_mutex_unlock(&channel->mutex);
   return readers;
 }
