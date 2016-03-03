@@ -56,7 +56,7 @@ djb_hash (char *str)
 }
 
 char*
-mfgets (FILE *file)
+str_fgets (FILE *file)
 {
   size_t bytes = 100;
   char *line = allocate(bytes+1);
@@ -740,7 +740,7 @@ file_print (file_t *file, char *pattern, ...)
 char*
 file_read_line (file_t *file)
 {
-  return mfgets(file->handle);
+  return str_fgets(file->handle);
 }
 
 void*
