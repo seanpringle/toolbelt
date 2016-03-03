@@ -106,6 +106,15 @@ typedef struct { off_t index; char *subject; int l1; } str_each_t;
 
 typedef int (*str_cb_ischar)(int);
 
+int str_eq  (char *a, char *b) { return !strcmp(a, b); }
+int str_ne  (char *a, char *b) { return  strcmp(a, b); }
+int str_lt  (char *a, char *b) { return  strcmp(a, b) <  0; }
+int str_lte (char *a, char *b) { return  strcmp(a, b) <= 0; }
+int str_gt  (char *a, char *b) { return  strcmp(a, b) >  0; }
+int str_gte (char *a, char *b) { return  strcmp(a, b) >= 0; }
+
+#define strf(...) mprintf(__VA_ARGS__)
+
 int
 str_skip (char *s, str_cb_ischar cb)
 {
@@ -2384,11 +2393,11 @@ thread_join (thread_t *thread)
     pthread_mutex_unlock(&thread->mutex);
     int rc = pthread_join(thread->pthread, NULL);
     pthread_mutex_lock(&thread->mutex);
-    if (rc)
+    if (rc == 0)
       thread->joined = 1;
     else
     {
-      errorf("thread_run (join): %d", rc);
+      errorf("thread_join: %d", rc);
       ok = 0;
     }
   }
@@ -2478,7 +2487,6 @@ thread_wait (thread_t *thread)
 void
 thread_free (thread_t *thread)
 {
-  vector_del(all_threads, thread->id);
   pthread_mutex_destroy(&thread->mutex);
   pthread_cond_destroy(&thread->cond);
   free(thread);
@@ -2593,6 +2601,7 @@ channel_broadcast (channel_t *channel, void *ptr)
     }
     pthread_mutex_unlock(&thread->mutex);
   }
+  list_clear(channel->readers);
   pthread_mutex_unlock(&channel->mutex);
 }
 
