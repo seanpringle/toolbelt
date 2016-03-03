@@ -415,7 +415,7 @@ text_del (text_t *text, size_t bytes)
 }
 
 size_t
-text_format (text_t *text, char *pattern, ...)
+text_format(text_t *text, char *pattern, ...)
 {
   size_t bytes = 0;
   char *result = NULL;
@@ -525,6 +525,7 @@ text_trim (text_t *text, str_cb_ischar cb)
   {
     str_trim(text->buffer, cb);
     text->bytes = strlen(text->buffer) + 1;
+    text->cursor = min(text->bytes-1, text->cursor);
   }
   return max(text->bytes-1, 0);
 }
@@ -579,7 +580,7 @@ text_init (text_t *text)
 }
 
 text_t*
-text_create (char *str)
+text_new (char *str)
 {
   text_t *text = allocate(sizeof(text_t));
   text_init(text);
@@ -590,13 +591,13 @@ text_create (char *str)
 text_t*
 text_copy (text_t *text)
 {
-  return text_create(text_get(text));
+  return text_new(text_get(text));
 }
 
 text_t*
 text_take (text_t *text, off_t pos, size_t len)
 {
-  text_t *new = text_create(NULL);
+  text_t *new = text_new(NULL);
   if (text->buffer)
   {
     pos = pos >= 0 ? min(text->bytes-1, pos): max(0, (int64_t)text->bytes + pos - 1);
@@ -616,7 +617,7 @@ text_take (text_t *text, off_t pos, size_t len)
 void text_home (text_t *text) { text_at(text, 0); }
 off_t text_end (text_t *text) { text_at(text, text_count(text)); return text->cursor; }
 
-#define textf(...) ({ text_t *t = text_create(NULL); text_format(t, __VA_ARGS__); t; })
+#define textf(...) ({ text_t *t = text_new(NULL); text_format(t, __VA_ARGS__); t; })
 
 #define FILE_READ (1<<0)
 #define FILE_WRITE (1<<1)
@@ -839,7 +840,7 @@ array_init_items (array_t *array)
 }
 
 array_t*
-array_create (size_t width)
+array_new (size_t width)
 {
   array_t *array = allocate(sizeof(array_t));
   array_init(array, width);
@@ -932,7 +933,7 @@ vector_init_items (vector_t *vector)
 }
 
 vector_t*
-vector_create ()
+vector_new ()
 {
   vector_t *vector = allocate(sizeof(vector_t));
   vector_init(vector);
@@ -1176,7 +1177,7 @@ list_init (list_t *list)
 }
 
 list_t*
-list_create ()
+list_new ()
 {
   list_t *list = allocate(sizeof(list_t));
   list_init(list);
@@ -1241,7 +1242,7 @@ list_shift (list_t *list)
 list_t*
 list_scan_skip (char *s, str_cb_ischar cb)
 {
-  list_t *list = list_create();
+  list_t *list = list_new();
   while (s && *s)
   {
     char *start = s;
@@ -1524,7 +1525,7 @@ map_del (map_t *map, void *key)
 }
 
 map_t*
-map_create ()
+map_new ()
 {
   map_t *map = allocate(sizeof(map_t));
   map_init(map, PRIME_1000);
@@ -1639,7 +1640,7 @@ json_string (json_t *json)
 }
 
 json_t*
-json_create ()
+json_new ()
 {
   json_t *json = allocate(sizeof(json_t));
   memset(json, 0, sizeof(json_t));
@@ -1649,7 +1650,7 @@ json_create ()
 json_t*
 json_parse_boolean (char *subject)
 {
-  json_t *json = json_create();
+  json_t *json = json_new();
   json->type   = JSON_BOOLEAN;
   json->start  = subject;
   json->length = str_skip(subject, isalpha);
@@ -1665,7 +1666,7 @@ json_parse_number (char *subject)
   strtoll(subject, &e1, 0);
   strtod(subject, &e2);
 
-  json_t *json = json_create();
+  json_t *json = json_new();
   json->type   = JSON_NUMBER;
   json->start  = subject;
 
@@ -1697,7 +1698,7 @@ json_parse_string (char *subject)
     end = subject + str_skip(subject, isname);
   }
 
-  json_t *json = json_create();
+  json_t *json = json_new();
   json->type   = JSON_STRING;
   json->start  = subject;
   json->length = end - subject;
@@ -1714,7 +1715,7 @@ json_parse_array (char *subject)
   if (*subject++ != '[')
     goto done;
 
-  json = json_create();
+  json = json_new();
   json->type   = JSON_ARRAY;
   json->start  = start;
 
@@ -1774,7 +1775,7 @@ json_parse_object (char *subject)
   if (*subject++ != '{')
     goto done;
 
-  json = json_create();
+  json = json_new();
   json->type   = JSON_OBJECT;
   json->start  = start;
 
@@ -2232,7 +2233,7 @@ dbr_fetch_map (dbr_t *dbr)
   if (dbr->fetched == dbr->selected)
     return NULL;
 
-  map_t *row = map_create();
+  map_t *row = map_new();
 
   for (size_t i = 0; i < dbr->fields; i++)
   {
@@ -2250,7 +2251,7 @@ dbr_fetch_array (dbr_t *dbr)
   if (dbr->fetched == dbr->selected)
     return NULL;
 
-  array_t *row = array_create(dbr->fields);
+  array_t *row = array_new(dbr->fields);
 
   for (size_t i = 0; i < dbr->fields; i++)
   {
@@ -2403,7 +2404,7 @@ thread_join (thread_t *thread)
 }
 
 thread_t*
-thread_create ()
+thread_new ()
 {
   pthread_mutex_lock(&all_threads_mutex);
 
@@ -2495,7 +2496,7 @@ multithreaded ()
 {
   pthread_key_create(&_key_self, NULL);
   pthread_mutex_init(&all_threads_mutex, NULL);
-  all_threads = vector_create();
+  all_threads = vector_new();
 }
 
 void
@@ -2521,12 +2522,12 @@ singlethreaded ()
 }
 
 channel_t*
-channel_create ()
+channel_new ()
 {
   channel_t *channel = allocate(sizeof(channel_t));
   pthread_mutex_init(&channel->mutex, NULL);
-  channel->queue = list_create();
-  channel->readers = list_create();
+  channel->queue = list_new();
+  channel->readers = list_new();
   channel->handled = 0;
   return channel;
 }
@@ -2622,7 +2623,7 @@ channel_consume (channel_t *channel)
   if (list_count(channel->queue))
   {
     consume = channel->queue;
-    channel->queue = list_create();
+    channel->queue = list_new();
   }
   pthread_mutex_unlock(&channel->mutex);
   return consume;
@@ -2692,7 +2693,7 @@ channel_select (channel_t **selected, int n, ...)
   va_list args;
   va_start(args, n);
 
-  list_t *channels = list_create();
+  list_t *channels = list_new();
 
   for (int i = 0; i < n; i++)
     list_push(channels, va_arg(args, channel_t*));
