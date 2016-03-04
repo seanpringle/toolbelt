@@ -1,3 +1,5 @@
+//#define TOOLBELT_DB
+//#define TOOLBELT_THREAD
 #include "toolbelt.c"
 
 int
@@ -34,8 +36,8 @@ main (int argc, char *argv[])
   free(a);
   free(b);
 
-  list_t *list = list_create();
-  ensure(list) errorf("list_create");
+  list_t *list = list_new();
+  ensure(list) errorf("list_new");
 
   list_ins(list, 0, "world");
   list_ins(list, 0, "hello");
@@ -62,8 +64,8 @@ main (int argc, char *argv[])
 
   list_free(list);
 
-  map_t *map = map_create();
-  ensure(map) errorf("map_create");
+  map_t *map = map_new();
+  ensure(map) errorf("map_new");
 
   map_set(map, "hello", "world");
   map_set(map, "alpha", "beta");
@@ -83,7 +85,7 @@ main (int argc, char *argv[])
 
   map_free(map);
 
-  map = map_create();
+  map = map_new();
   map->hash = map_hash_int;
   map->compare = map_cmp_int;
 
@@ -103,7 +105,7 @@ main (int argc, char *argv[])
 
   map_free(map);
 
-  map = map_create();
+  map = map_new();
   map->clear = map_clear_free;
 
   for (int i = 0; i < 10000; i++)
@@ -124,6 +126,11 @@ main (int argc, char *argv[])
   char *dquote = str_decode("\"hello\\nworld\\n\"", NULL, STR_ENCODE_DQUOTE);
   ensure(!strcmp(dquote, "hello\nworld\n"))
     errorf("str_decode DQUOTE");
+  free(dquote);
+
+  dquote = str_encode("\"hello\nworld\"", STR_ENCODE_DQUOTE);
+  ensure(!strcmp(dquote, "\"\\\"hello\\nworld\\\"\""))
+    errorf("str_encode DQUOTE");
   free(dquote);
 
   json_t *json, *jval;
@@ -175,7 +182,7 @@ main (int argc, char *argv[])
 
   pool_close(&pool);
 
-  vector_t *v = vector_create();
+  vector_t *v = vector_new();
   vector_push(v, "hello");
   vector_push(v, "world");
   vector_del(v, 0);
@@ -186,7 +193,7 @@ main (int argc, char *argv[])
 
   vector_free(v);
 
-  array_t *ar = array_create(10);
+  array_t *ar = array_new(10);
   array_set(ar, 0, "hello");
   array_set(ar, 1, "world");
 
