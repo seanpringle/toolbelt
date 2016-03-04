@@ -2811,6 +2811,5 @@ command (const char *cmd, const char *data, char **result)
 
   int status = EXIT_SUCCESS;
   waitpid(pid, &status, 0);
-
-  return res;
+  return status;
 }
