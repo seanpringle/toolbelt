@@ -223,28 +223,31 @@ str_encode (char *s, int format)
   else
   if (format == STR_ENCODE_DQUOTE)
   {
-    result = strf("\"");
-    char *change = NULL;
+    int length = 0;
+    result = allocate(8);
+
+    result[length++] = '"';
+    result[length] = 0;
 
     str_each(s, char c)
     {
-           if (c == 0x07) change = strf("%s\\a", result);
-      else if (c == 0x08) change = strf("%s\\b", result);
-      else if (c == 0x0c) change = strf("%s\\f", result);
-      else if (c == 0x0a) change = strf("%s\\n", result);
-      else if (c == 0x0d) change = strf("%s\\r", result);
-      else if (c == 0x09) change = strf("%s\\t", result);
-      else if (c == 0x0B) change = strf("%s\\v", result);
-      else if (c == '\\') change = strf("%s\\\\", result);
-      else if (c ==  '"') change = strf("%s\\\"", result);
-      else                change = strf("%s%c", result, c);
+      result = reallocate(result, length + 8);
 
-      free(result);
-      result = change;
+           if (c == 0x07) { strcpy(result+length, "\\a"); length += 2; }
+      else if (c == 0x08) { strcpy(result+length, "\\b"); length += 2; }
+      else if (c == 0x0c) { strcpy(result+length, "\\f"); length += 2; }
+      else if (c == 0x0a) { strcpy(result+length, "\\n"); length += 2; }
+      else if (c == 0x0d) { strcpy(result+length, "\\r"); length += 2; }
+      else if (c == 0x09) { strcpy(result+length, "\\t"); length += 2; }
+      else if (c == 0x0B) { strcpy(result+length, "\\v"); length += 2; }
+      else if (c == '\\') { strcpy(result+length, "\\\\"); length += 2; }
+      else if (c ==  '"') { strcpy(result+length, "\\\""); length += 2; }
+      else                { result[length++] = c; result[length] = 0; }
     }
-    change = strf("%s\"", result);
-    free(result);
-    result = change;
+
+    result = reallocate(result, length + 8);
+    result[length++] = '"';
+    result[length] = 0;
   }
   else
   {
