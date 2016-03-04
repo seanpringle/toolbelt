@@ -2671,17 +2671,14 @@ channel_multi_read (channel_t **selected, list_t *channels)
     if (channel == from) continue;
 
     pthread_mutex_lock(&channel->mutex);
-    int slot = -1;
     list_each(channel->readers, thread_t *thread)
     {
       if (thread == self)
-        slot = loop.index;
+      {
+        list_del(channel->readers, loop.index);
+        break;
+      }
     }
-    if (slot >= 0)
-    {
-      list_del(channel->readers, slot);
-    }
-
     pthread_mutex_unlock(&channel->mutex);
   }
 
@@ -2702,7 +2699,7 @@ channel_select (channel_t **selected, int n, ...)
 
   va_end(args);
 
-  void *ptr = channel_multi_read (selected, channels);
+  void *ptr = channel_multi_read(selected, channels);
 
   list_free(channels);
 
