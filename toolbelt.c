@@ -2743,3 +2743,60 @@ channel_handled (channel_t *channel)
 }
 
 #endif
+
+#define EXEC_READ 0
+#define EXEC_WRITE 1
+
+typedef int (*sandbox_cb)();
+
+#include <sys/wait.h>
+
+int
+sandbox (sandbox_cb cb, char *in, char **out)
+{
+  int p_stdin[2], p_stdout[2];
+
+  if (pipe(p_stdin) != 0 || pipe(p_stdout) != 0)
+    return -1;
+
+  pid_t pid = fork();
+  
+  if (pid < 0)
+    return -1;
+
+  if (pid == 0)
+  {
+    close(p_stdin[EXEC_WRITE]);
+    dup2(p_stdin[EXEC_READ], EXEC_READ);
+    close(p_stdout[EXEC_READ]);
+    dup2(p_stdout[EXEC_WRITE], EXEC_WRITE);
+    exit(cb());
+  }
+  
+  int infp = p_stdin[EXEC_WRITE];
+  int outfp = p_stdout[EXEC_READ];
+  close(p_stdin[EXEC_READ]);
+  close(p_stdout[EXEC_WRITE]);
+  
+  write(infp, in, strlen(in));
+  close(infp);
+
+  int length = 0;
+  char c, *result = allocate(8);
+
+  while (read(outfp, &c, 1))
+  {
+    result = reallocate(result, length+8);
+    result[length++] = c;
+    result[length] = 0;
+  }
+  result[length] = 0;
+  *out = result;
+
+  close(outfp);
+
+  int status = 0;
+  waitpid(pid, &status, 0);
+  return status;
+}
+

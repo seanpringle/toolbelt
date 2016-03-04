@@ -20,6 +20,20 @@ map_hash_int (void *a)
 }
 
 int
+sandbox_ok ()
+{
+  printf("got %s", str_fgets(stdin));
+  return 0;
+}
+
+int
+sandbox_what ()
+{
+  printf("huh? %s", str_fgets(stdin));
+  return 1;
+}
+
+int
 main (int argc, char *argv[])
 {
   char *item;
@@ -236,6 +250,20 @@ main (int argc, char *argv[])
 
   unlink("fubar");
   unlink("pool");
+
+  char *res = NULL;
+
+  ensure(sandbox(sandbox_ok, "hello", &res) == 0)
+    errorf("sandbox_ok");
+
+  printf("%s\n", res);
+  free(res); res = NULL;
+
+  ensure(sandbox(sandbox_what, "goodbye", &res) != 0)
+    errorf("sandbox_what");
+
+  printf("%s\n", res);
+  free(res); res = NULL;
 
   return EXIT_SUCCESS;
 }
