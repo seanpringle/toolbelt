@@ -2744,59 +2744,71 @@ channel_handled (channel_t *channel)
 
 #endif
 
+#include <sys/wait.h>
+
+void catch_exit(int sig)
+{
+  while (0 < waitpid(-1, NULL, WNOHANG));
+}
+
 #define EXEC_READ 0
 #define EXEC_WRITE 1
 
-typedef int (*sandbox_cb)();
-
-#include <sys/wait.h>
-
-int
-sandbox (sandbox_cb cb, char *in, char **out)
+// execute sub-process and connect its stdin=infp and stdout=outfp
+pid_t
+exec_cmd_io(const char *command, int *infp, int *outfp)
 {
+  signal(SIGCHLD, catch_exit);
   int p_stdin[2], p_stdout[2];
+  pid_t pid;
 
   if (pipe(p_stdin) != 0 || pipe(p_stdout) != 0)
     return -1;
-
-  pid_t pid = fork();
-  
+  pid = fork();
   if (pid < 0)
-    return -1;
-
-  if (pid == 0)
+    return pid;
+  else if (pid == 0)
   {
     close(p_stdin[EXEC_WRITE]);
     dup2(p_stdin[EXEC_READ], EXEC_READ);
     close(p_stdout[EXEC_READ]);
     dup2(p_stdout[EXEC_WRITE], EXEC_WRITE);
-    exit(cb());
+    execlp("/bin/sh", "sh", "-c", command, NULL);
+    exit(EXIT_FAILURE);
   }
-  
-  int infp = p_stdin[EXEC_WRITE];
-  int outfp = p_stdout[EXEC_READ];
+  if (infp == NULL)
+    close(p_stdin[EXEC_WRITE]);
+  else
+    *infp = p_stdin[EXEC_WRITE];
+  if (outfp == NULL)
+    close(p_stdout[EXEC_READ]);
+  else
+    *outfp = p_stdout[EXEC_READ];
   close(p_stdin[EXEC_READ]);
   close(p_stdout[EXEC_WRITE]);
-  
-  write(infp, in, strlen(in));
-  close(infp);
-
-  int length = 0;
-  char c, *result = allocate(8);
-
-  while (read(outfp, &c, 1))
-  {
-    result = reallocate(result, length+8);
-    result[length++] = c;
-    result[length] = 0;
-  }
-  result[length] = 0;
-  *out = result;
-
-  close(outfp);
-
-  int status = 0;
-  waitpid(pid, &status, 0);
-  return status;
+  return pid;
 }
 
+char*
+sys_exec(const char *cmd, const char *data)
+{
+  int in, out;
+  exec_cmd_io(cmd, &in, &out);
+
+  if (data)
+    write(in, data, strlen(data));
+  close(in);
+
+  int len = 0;
+  char *res = malloc(1024);
+  for (;;)
+  {
+    int rc = read(out, res+len, 1023);
+    if (rc > 0) len += rc;
+    if (rc < 1023) break;
+    res = realloc(res, len+1024);
+  }
+  res[len] = 0;
+  close(out);
+  return res;
+}
