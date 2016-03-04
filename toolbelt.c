@@ -2608,10 +2608,12 @@ void*
 channel_try_read (channel_t *channel)
 {
   void *ptr = NULL;
-  pthread_mutex_lock(&channel->mutex);
-  if (list_count(channel->queue))
-    ptr = list_shift(channel->queue);
-  pthread_mutex_unlock(&channel->mutex);
+  if (pthread_mutex_trylock(&channel->mutex) == 0)
+  {
+    if (list_count(channel->queue))
+      ptr = list_shift(channel->queue);
+    pthread_mutex_unlock(&channel->mutex);
+  }
   return ptr;
 }
 
