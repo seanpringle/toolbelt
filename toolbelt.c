@@ -62,7 +62,7 @@ str_fgets (FILE *file)
   char *line = allocate(bytes+1);
   line[0] = 0;
 
-  while (fgets(line + bytes - 100, 101, file) && !strchr(line + bytes - 100, '\n'))
+  while (!feof(file) && !ferror(file) && fgets(line + bytes - 100, 101, file) && !strchr(line + bytes - 100, '\n'))
   {
     bytes += 100;
     line = reallocate(line, bytes+1);
