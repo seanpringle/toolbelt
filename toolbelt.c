@@ -2746,11 +2746,6 @@ channel_handled (channel_t *channel)
 
 #include <sys/wait.h>
 
-void catch_exit(int sig)
-{
-  while (0 < waitpid(-1, NULL, WNOHANG));
-}
-
 #define EXEC_READ 0
 #define EXEC_WRITE 1
 
@@ -2758,7 +2753,6 @@ void catch_exit(int sig)
 pid_t
 exec_cmd_io(const char *command, int *infp, int *outfp)
 {
-  signal(SIGCHLD, catch_exit);
   int p_stdin[2], p_stdout[2];
   pid_t pid;
 
@@ -2789,11 +2783,14 @@ exec_cmd_io(const char *command, int *infp, int *outfp)
   return pid;
 }
 
-char*
-sys_exec(const char *cmd, const char *data)
+int
+command (const char *cmd, const char *data, char **result)
 {
   int in, out;
-  exec_cmd_io(cmd, &in, &out);
+  pid_t pid = exec_cmd_io(cmd, &in, &out);
+
+  if (pid <= 0)
+    return EXIT_FAILURE;
 
   if (data)
     write(in, data, strlen(data));
@@ -2809,6 +2806,11 @@ sys_exec(const char *cmd, const char *data)
     res = realloc(res, len+1024);
   }
   res[len] = 0;
+  *result = res;
   close(out);
+
+  int status = EXIT_SUCCESS;
+  waitpid(pid, &status, 0);
+
   return res;
 }
