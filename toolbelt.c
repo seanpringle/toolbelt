@@ -2746,70 +2746,113 @@ channel_handled (channel_t *channel)
 
 #include <sys/wait.h>
 
-#define EXEC_READ 0
-#define EXEC_WRITE 1
+#define PIPE_READ 0
+#define PIPE_WRITE 1
 
 // execute sub-process and connect its stdin=infp and stdout=outfp
 pid_t
-exec_cmd_io(const char *command, int *infp, int *outfp)
+exec_cmd_io(const char *command, int *infp, int *outfp, int *errfp)
 {
-  int p_stdin[2], p_stdout[2];
-  pid_t pid;
+  int p_stdin[2], p_stdout[2], p_stderr[2];
 
-  if (pipe(p_stdin) != 0 || pipe(p_stdout) != 0)
+  if (pipe(p_stdin) != 0 || pipe(p_stdout) != 0 || pipe(p_stderr) != 0)
     return -1;
-  pid = fork();
+
+  pid_t pid = fork();
+
   if (pid < 0)
     return pid;
-  else if (pid == 0)
+
+  if (pid == 0)
   {
-    close(p_stdin[EXEC_WRITE]);
-    dup2(p_stdin[EXEC_READ], EXEC_READ);
-    close(p_stdout[EXEC_READ]);
-    dup2(p_stdout[EXEC_WRITE], EXEC_WRITE);
+    close(p_stdin[PIPE_WRITE]);
+    dup2(p_stdin[PIPE_READ], STDIN_FILENO);
+
+    close(p_stdout[PIPE_READ]);
+    dup2(p_stdout[PIPE_WRITE], STDOUT_FILENO);
+
+    close(p_stderr[PIPE_READ]);
+    dup2(p_stderr[PIPE_WRITE], STDERR_FILENO);
+
     execlp("/bin/sh", "sh", "-c", command, NULL);
     exit(EXIT_FAILURE);
   }
+
   if (infp == NULL)
-    close(p_stdin[EXEC_WRITE]);
+    close(p_stdin[PIPE_WRITE]);
   else
-    *infp = p_stdin[EXEC_WRITE];
+    *infp = p_stdin[PIPE_WRITE];
+
   if (outfp == NULL)
-    close(p_stdout[EXEC_READ]);
+    close(p_stdout[PIPE_READ]);
   else
-    *outfp = p_stdout[EXEC_READ];
-  close(p_stdin[EXEC_READ]);
-  close(p_stdout[EXEC_WRITE]);
+    *outfp = p_stdout[PIPE_READ];
+
+  if (errfp == NULL)
+    close(p_stderr[PIPE_READ]);
+  else
+    *errfp = p_stderr[PIPE_READ];
+
+  close(p_stdin[PIPE_READ]);
+  close(p_stdout[PIPE_WRITE]);
+  close(p_stderr[PIPE_WRITE]);
+
   return pid;
 }
 
 int
-command (const char *cmd, const char *data, char **result)
+command (const char *cmd, const char *data, char **output, char **errput)
 {
-  int in, out;
-  pid_t pid = exec_cmd_io(cmd, &in, &out);
+  int status = EXIT_SUCCESS;
+  int in, out, err;
+
+  pid_t pid = exec_cmd_io(cmd, &in, &out, &err);
 
   if (pid <= 0)
-    return EXIT_FAILURE;
+  {
+    status = EXIT_FAILURE;
+    goto done;
+  }
 
-  if (data)
-    write(in, data, strlen(data));
+  if (data && write(in, data, strlen(data)) != strlen(data))
+  {
+    status = EXIT_FAILURE;
+    close(in);
+    close(out);
+    close(err);
+    kill(pid, SIGTERM);
+    goto done;
+  }
+
   close(in);
 
-  int len = 0;
-  char *res = malloc(1024);
+  int outlen = 0;
+  char *outres = malloc(1024);
+  int errlen = 0;
+  char *errres = malloc(1024);
   for (;;)
   {
-    int rc = read(out, res+len, 1023);
-    if (rc > 0) len += rc;
+    int rc = read(out, outres+outlen, 1023);
+    if (rc > 0) outlen += rc;
     if (rc < 1023) break;
-    res = realloc(res, len+1024);
-  }
-  res[len] = 0;
-  *result = res;
-  close(out);
+    outres = realloc(outres, outlen+1024);
 
-  int status = EXIT_SUCCESS;
+    rc = read(err, errres+errlen, 1023);
+    if (rc > 0) errlen += rc;
+    if (rc < 1023) break;
+    errres = realloc(errres, errlen+1024);
+  }
+  outres[outlen] = 0;
+  errres[errlen] = 0;
+
+  if (output) *output = outres; else free(outres);
+  if (errput) *errput = errres; else free(errres);
+
+  close(out);
+  close(err);
+
   waitpid(pid, &status, 0);
+
+done:
   return status;
 }
