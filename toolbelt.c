@@ -2834,12 +2834,12 @@ command (const char *cmd, const char *data, char **output, char **errput)
   {
     int rc = read(out, outres+outlen, 1023);
     if (rc > 0) outlen += rc;
-    if (rc < 1023) break;
+    if (rc == 0) break;
     outres = realloc(outres, outlen+1024);
 
     rc = read(err, errres+errlen, 1023);
     if (rc > 0) errlen += rc;
-    if (rc < 1023) break;
+    if (rc == 0) break;
     errres = realloc(errres, errlen+1024);
   }
   outres[outlen] = 0;
