@@ -2832,15 +2832,15 @@ command (const char *cmd, const char *data, char **output, char **errput)
   char *errres = malloc(1024);
   for (;;)
   {
-    int rc = read(out, outres+outlen, 1023);
-    if (rc > 0) outlen += rc;
-    if (rc == 0) break;
+    int orc = read(out, outres+outlen, 1023);
+    if (orc > 0) outlen += orc;
     outres = realloc(outres, outlen+1024);
 
-    rc = read(err, errres+errlen, 1023);
-    if (rc > 0) errlen += rc;
-    if (rc == 0) break;
+    int erc = read(err, errres+errlen, 1023);
+    if (erc > 0) errlen += erc;
     errres = realloc(errres, errlen+1024);
+
+    if (!orc && !erc) break;
   }
   outres[outlen] = 0;
   errres[errlen] = 0;
