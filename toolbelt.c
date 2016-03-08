@@ -2196,7 +2196,7 @@ pool_free_chunk (pool_t *pool, off_t pos, size_t bytes)
 
 #ifdef TOOLBELT_DB
 
-#include <postgresql/libpq-fe.h>
+#include <libpq-fe.h>
 
 typedef struct _db_t {
   PGconn *conn;
