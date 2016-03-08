@@ -2856,3 +2856,37 @@ command (const char *cmd, const char *data, char **output, char **errput)
 done:
   return status;
 }
+
+#include <sys/socket.h>
+#include <sys/un.h>
+
+typedef int (*socket_serve_cb)(int);
+
+int
+socket_serve (const char *path, socket_serve_cb cb)
+{
+  int sock_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+
+  if (sock_fd < 0)
+    return EXIT_FAILURE;
+
+  struct sockaddr_un addr;
+  memset(&addr, 0, sizeof(addr));
+  addr.sun_family = AF_UNIX;
+  strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
+
+  unlink(path);
+
+  if (bind(sock_fd, (struct sockaddr*)&addr, sizeof(addr)) != 0)
+    return EXIT_FAILURE;
+
+  if (listen(sock_fd, 32) != 0)
+    return EXIT_FAILURE;
+
+  int fd;
+
+  while ((fd = accept(sock_fd, NULL, NULL)) && fd >= 0 && cb(fd));
+
+  close(sock_fd);
+  return EXIT_SUCCESS;
+}
