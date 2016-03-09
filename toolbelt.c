@@ -2469,6 +2469,15 @@ thread_free (thread_t *thread)
   free(thread);
 }
 
+int
+thread_running (thread_t *thread)
+{
+  pthread_mutex_lock(&thread->mutex);
+  int running = !thread->stopped;
+  pthread_mutex_unlock(&thread->mutex);
+  return running;
+}
+
 void
 multithreaded ()
 {
