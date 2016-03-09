@@ -403,6 +403,13 @@ text_ins (text_t *text, char *str)
 }
 
 void
+text_app (text_t *text, char *str)
+{
+  text_end(text);
+  text_ins(text, str);
+}
+
+void
 text_del (text_t *text, size_t bytes)
 {
   if (text->buffer)
