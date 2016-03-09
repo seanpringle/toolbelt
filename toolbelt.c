@@ -2516,6 +2516,7 @@ channel_free (channel_t *channel)
 {
   pthread_mutex_lock(&channel->mutex);
   pthread_mutex_destroy(&channel->mutex);
+  pthread_cond_destroy(&channel->write_cond);
   list_free(channel->queue);
   list_free(channel->readers);
   free(channel);
