@@ -592,6 +592,7 @@ void text_home (text_t *text) { text_at(text, 0); }
 off_t text_end (text_t *text) { text_at(text, text_count(text)); return text->cursor; }
 
 #define textf(...) ({ char *_s = strf(__VA_ARGS__); text_t *_t = text_new(_s); free(_s); text_end(_t); _t; })
+#define textf_set(o,...) ({ text_t *_t = (o); char *_s = strf(__VA_ARGS__); text_set(_t, _s); free(_s); _t; })
 #define textf_ins(o,...) ({ text_t *_t = (o); char *_s = strf(__VA_ARGS__); text_ins(_t, _s); free(_s); _t; })
 
 #define FILE_READ (1<<0)
