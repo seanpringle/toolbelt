@@ -2559,7 +2559,7 @@ channel_write (channel_t *channel, void *ptr)
   }
   if (!dispatched)
   {
-    while (channel->limit < list_count(channel->queue))
+    while (channel->limit > 0 && channel->limit < list_count(channel->queue))
       pthread_cond_wait(&channel->write_cond, &channel->mutex);
 
     list_push(channel->queue, ptr);
