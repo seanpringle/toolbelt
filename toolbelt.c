@@ -2330,9 +2330,11 @@ typedef int (*thread_main)(void*);
 
 typedef struct _channel_t {
   pthread_mutex_t mutex;
+  pthread_cond_t write_cond;
   list_t *queue;
   list_t *readers;
   size_t handled;
+  size_t limit;
 } channel_t;
 
 typedef struct _thread_t {
@@ -2497,13 +2499,15 @@ singlethreaded ()
 }
 
 channel_t*
-channel_new ()
+channel_new (size_t limit)
 {
   channel_t *channel = allocate(sizeof(channel_t));
   pthread_mutex_init(&channel->mutex, NULL);
+  pthread_cond_init(&channel->write_cond, NULL);
   channel->queue = list_new();
   channel->readers = list_new();
   channel->handled = 0;
+  channel->limit = limit;
   return channel;
 }
 
@@ -2521,6 +2525,7 @@ void
 channel_write (channel_t *channel, void *ptr)
 {
   pthread_mutex_lock(&channel->mutex);
+
   channel->handled++;
 
   int dispatched = 0;
@@ -2553,6 +2558,9 @@ channel_write (channel_t *channel, void *ptr)
   }
   if (!dispatched)
   {
+    while (channel->limit < list_count(channel->queue))
+      pthread_cond_wait(&channel->write_cond, &channel->mutex);
+
     list_push(channel->queue, ptr);
   }
   pthread_mutex_unlock(&channel->mutex);
@@ -2586,7 +2594,10 @@ channel_try_read (channel_t *channel)
   if (pthread_mutex_trylock(&channel->mutex) == 0)
   {
     if (list_count(channel->queue))
+    {
       ptr = list_shift(channel->queue);
+      pthread_cond_signal(&channel->write_cond);
+    }
     pthread_mutex_unlock(&channel->mutex);
   }
   return ptr;
@@ -2601,6 +2612,7 @@ channel_consume (channel_t *channel)
   {
     consume = channel->queue;
     channel->queue = list_new();
+    pthread_cond_signal(&channel->write_cond);
   }
   pthread_mutex_unlock(&channel->mutex);
   return consume;
@@ -2619,6 +2631,7 @@ channel_multi_read (channel_t **selected, list_t *channels)
     if (list_count(channel->queue))
     {
       ptr = list_shift(channel->queue);
+      pthread_cond_signal(&channel->write_cond);
       from = channel;
     }
     else
