@@ -106,12 +106,12 @@ typedef struct { off_t index; char *subject; int l1; } str_each_t;
 
 typedef int (*str_cb_ischar)(int);
 
-int str_eq  (char *a, char *b) { return !strcmp(a, b); }
-int str_ne  (char *a, char *b) { return  strcmp(a, b); }
-int str_lt  (char *a, char *b) { return  strcmp(a, b) <  0; }
-int str_lte (char *a, char *b) { return  strcmp(a, b) <= 0; }
-int str_gt  (char *a, char *b) { return  strcmp(a, b) >  0; }
-int str_gte (char *a, char *b) { return  strcmp(a, b) >= 0; }
+int str_eq  (char *a, char *b) { return a && b && !strcmp(a, b); }
+int str_ne  (char *a, char *b) { return a && b &&  strcmp(a, b); }
+int str_lt  (char *a, char *b) { return a && b &&  strcmp(a, b) <  0; }
+int str_lte (char *a, char *b) { return a && b &&  strcmp(a, b) <= 0; }
+int str_gt  (char *a, char *b) { return a && b &&  strcmp(a, b) >  0; }
+int str_gte (char *a, char *b) { return a && b &&  strcmp(a, b) >= 0; }
 
 int
 str_skip (char *s, str_cb_ischar cb)
@@ -161,6 +161,7 @@ int issquote (int c) { return c == '\''; }
 int isname (int c) { return isalnum(c) || c == '_'; }
 int iscolon (int c) { return c == ':'; }
 int issemicolon (int c) { return c == ';'; }
+int isquestion (int c) { return c == '?'; }
 
 char*
 str_copy (char *s, size_t length)
@@ -354,6 +355,14 @@ text_free (text_t *text)
 }
 
 char*
+text_unwrap (text_t *text)
+{
+  char *str = text->buffer;
+  free(text);
+  return str;
+}
+
+char*
 text_at (text_t *text, off_t pos)
 {
   text->cursor = min(text->bytes - 1, max(0, pos));
@@ -453,7 +462,7 @@ text_len (text_t *text)
   return 0;
 }
 
-off_t
+size_t
 text_scan (text_t *text, str_cb_ischar cb)
 {
   if (text->buffer)
@@ -559,6 +568,17 @@ text_new (char *str)
   text_t *text = allocate(sizeof(text_t));
   text_init(text);
   if (str) text_set(text, str);
+  return text;
+}
+
+text_t*
+text_wrap (char *str)
+{
+  text_t *text = allocate(sizeof(text_t));
+  text_init(text);
+  text->bytes = strlen(str) + 1;
+  text->buffer = str;
+  text->cursor = 0;
   return text;
 }
 
@@ -794,7 +814,7 @@ typedef struct { off_t index; array_t *array; int l1; } array_each_t;
     for (_val_ = loop.array->items[loop.index]; loop.l1; loop.l1 = !loop.l1)
 
 void
-array_clear_free_vals (array_t *array)
+array_clear_free (array_t *array)
 {
   array_each(array, void *ptr) free(ptr);
 }
@@ -888,7 +908,7 @@ typedef struct { off_t index; vector_t *vector; int l1; } vector_each_t;
     for (_val_ = loop.vector->items[loop.index]; loop.l1; loop.l1 = !loop.l1)
 
 void
-vector_clear_free_vals (vector_t *vector)
+vector_clear_free (vector_t *vector)
 {
   vector_each(vector, void *ptr) free(ptr);
 }
@@ -1364,7 +1384,7 @@ map_init_chains (map_t *map)
   for (off_t i = 0; i < map->width; i++)
   {
     vector_init(&map->chains[i]);
-    map->chains[i].clear = vector_clear_free_vals;
+    map->chains[i].clear = vector_clear_free;
   }
 }
 
@@ -2193,8 +2213,11 @@ dbr_clear (dbr_t *dbr)
 void
 dbr_free (dbr_t *dbr)
 {
-  dbr_clear(dbr);
-  free(dbr);
+  if (dbr)
+  {
+    dbr_clear(dbr);
+    free(dbr);
+  }
 }
 
 size_t
@@ -2206,16 +2229,20 @@ dbr_selected (dbr_t *dbr)
 map_t*
 dbr_fetch_map (dbr_t *dbr)
 {
+  if (!dbr)
+    return NULL;
+
   if (dbr->fetched == dbr->selected)
     return NULL;
 
   map_t *row = map_new();
+  row->clear = map_clear_free;
 
   for (size_t i = 0; i < dbr->fields; i++)
   {
     char *key = PQfname(dbr->res, i);
     char *val = PQgetisnull(dbr->res, dbr->fetched, i) ? NULL: PQgetvalue(dbr->res, dbr->fetched, i);
-    map_set(row, key, val);
+    map_set(row, strf("%s", key), strf("%s", val));
   }
   dbr->fetched++;
   return row;
@@ -2224,15 +2251,19 @@ dbr_fetch_map (dbr_t *dbr)
 array_t*
 dbr_fetch_array (dbr_t *dbr)
 {
+  if (!dbr)
+    return NULL;
+
   if (dbr->fetched == dbr->selected)
     return NULL;
 
   array_t *row = array_new(dbr->fields);
+  row->clear = array_clear_free;
 
   for (size_t i = 0; i < dbr->fields; i++)
   {
     char *val = PQgetisnull(dbr->res, dbr->fetched, i) ? NULL: PQgetvalue(dbr->res, dbr->fetched, i);
-    array_set(row, i, val);
+    array_set(row, i, strf("%s", val));
   }
   dbr->fetched++;
   return row;
@@ -2248,7 +2279,7 @@ db_query (db_t *db, const char *query)
 
   if (rs != PGRES_TUPLES_OK && rs != PGRES_SINGLE_TUPLE && rs != PGRES_COMMAND_OK)
   {
-    errorf("PostgresSQL query failed: %s", PQresultErrorMessage(dbr->res));
+    errorf("PostgresSQL query failed: %s: %s", PQresultErrorMessage(dbr->res), query);
     dbr_free(dbr);
     return NULL;
   }
@@ -2310,9 +2341,9 @@ db_connect (db_t *db, const char *dbhost, const char *dbname, const char *dbuser
   if (PQstatus(db->conn) != CONNECTION_OK)
   {
     errorf("PostgresSQL connect failed: %s", PQerrorMessage(db->conn));
-    return 0;
+    return EXIT_FAILURE;
   }
-  return 1;
+  return EXIT_SUCCESS;
 }
 
 void
@@ -2392,6 +2423,7 @@ thread_new ()
     if (t->stopped)
     {
       thread_join(t);
+      pthread_mutex_unlock(&t->mutex);
       pthread_mutex_unlock(&all_threads_mutex);
       return t;
     }
@@ -2446,9 +2478,9 @@ thread_start (thread_t *thread, thread_main main, void *payload)
   if (rc)
   {
     errorf("thread_start (create): %d", rc);
-    return 0;
+    return EXIT_FAILURE;
   }
-  return 1;
+  return EXIT_SUCCESS;
 }
 
 int
@@ -2484,6 +2516,9 @@ multithreaded ()
   pthread_key_create(&_key_self, NULL);
   pthread_mutex_init(&all_threads_mutex, NULL);
   all_threads = vector_new();
+
+  pthread_setspecific(_key_self, thread_new());
+  self->started = 1;
 }
 
 void
@@ -2499,6 +2534,8 @@ singlethreaded ()
   }
   vector_free(all_threads);
   all_threads = NULL;
+
+  free(self);
 
   int rc = pthread_key_delete(_key_self);
 
@@ -2881,7 +2918,7 @@ socket_serve (const char *path, socket_serve_cb cb)
 
   int fd;
 
-  while ((fd = accept(sock_fd, NULL, NULL)) && fd >= 0 && cb(fd));
+  while ((fd = accept(sock_fd, NULL, NULL)) && fd >= 0 && cb(fd) == EXIT_SUCCESS);
 
   close(sock_fd);
   return EXIT_SUCCESS;
