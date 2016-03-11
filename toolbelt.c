@@ -162,6 +162,8 @@ int isname (int c) { return isalnum(c) || c == '_'; }
 int iscolon (int c) { return c == ':'; }
 int issemicolon (int c) { return c == ';'; }
 int isquestion (int c) { return c == '?'; }
+int isequals (int c) { return c == '='; }
+int isampersand (int c) { return c == '&'; }
 
 char*
 str_copy (char *s, size_t length)
@@ -175,6 +177,7 @@ str_copy (char *s, size_t length)
 #define STR_ENCODE_HEX 1
 #define STR_ENCODE_SQL 2
 #define STR_ENCODE_DQUOTE 3
+#define STR_ENCODE_JSON 4
 
 char*
 str_encode (char *s, int format)
@@ -249,6 +252,26 @@ str_encode (char *s, int format)
     result = reallocate(result, length + 8);
     result[length++] = '"';
     result[length] = 0;
+  }
+  else
+  if (format == STR_ENCODE_JSON)
+  {
+    char *e = NULL;
+
+    if (!s)
+      return strf("null");
+
+    int len = strlen(s);
+
+    int64_t d64 = strtoll(s, &e, 0);
+    if (s + len == e)
+      return strf("%ld", d64);
+
+    double dn = strtod(s, &e);
+    if (s + len == e)
+      return strf("%10e", dn);
+
+    return str_encode(s, STR_ENCODE_DQUOTE);
   }
   else
   {
@@ -725,7 +748,7 @@ file_write (file_t *file, void *ptr, size_t bytes)
 }
 
 int
-file_print (file_t *file, char *pattern, ...)
+file_printf (file_t *file, char *pattern, ...)
 {
   va_list args;
   va_start(args, pattern);
@@ -2202,6 +2225,8 @@ typedef struct _dbr_t {
   size_t selected;
   size_t fetched;
   size_t fields;
+  map_t *row_map;
+  array_t *row_array;
 } dbr_t;
 
 void
@@ -2215,15 +2240,46 @@ dbr_free (dbr_t *dbr)
 {
   if (dbr)
   {
+    map_free(dbr->row_map);
+    array_free(dbr->row_array);
     dbr_clear(dbr);
     free(dbr);
   }
 }
 
 size_t
+dbr_affected (dbr_t *dbr)
+{
+  return dbr ? dbr->affected: 0;
+}
+
+size_t
 dbr_selected (dbr_t *dbr)
 {
-  return dbr->selected;
+  return dbr ? dbr->selected: 0;
+}
+
+size_t
+dbr_fetched (dbr_t *dbr)
+{
+  return dbr ? dbr->fetched: 0;
+}
+
+array_t*
+dbr_fields (dbr_t *dbr)
+{
+  if (!dbr)
+    return NULL;
+
+  array_t *array = array_new(dbr->fields);
+  array->clear = array_clear_free;
+
+  for (size_t i = 0; i < dbr->fields; i++)
+  {
+    char *key = PQfname(dbr->res, i);
+    array_set(array, i, strf("%s", key));
+  }
+  return array;
 }
 
 map_t*
@@ -2235,17 +2291,18 @@ dbr_fetch_map (dbr_t *dbr)
   if (dbr->fetched == dbr->selected)
     return NULL;
 
-  map_t *row = map_new();
-  row->clear = map_clear_free;
+  map_free(dbr->row_map);
+  dbr->row_map = map_new();
+  dbr->row_map->clear = map_clear_free;
 
   for (size_t i = 0; i < dbr->fields; i++)
   {
     char *key = PQfname(dbr->res, i);
     char *val = PQgetisnull(dbr->res, dbr->fetched, i) ? NULL: PQgetvalue(dbr->res, dbr->fetched, i);
-    map_set(row, strf("%s", key), strf("%s", val));
+    map_set(dbr->row_map, strf("%s", key), val ? strf("%s", val): NULL);
   }
   dbr->fetched++;
-  return row;
+  return dbr->row_map;
 }
 
 array_t*
@@ -2257,16 +2314,17 @@ dbr_fetch_array (dbr_t *dbr)
   if (dbr->fetched == dbr->selected)
     return NULL;
 
-  array_t *row = array_new(dbr->fields);
-  row->clear = array_clear_free;
+  array_free(dbr->row_array);
+  dbr->row_array = array_new(dbr->fields);
+  dbr->row_array->clear = array_clear_free;
 
   for (size_t i = 0; i < dbr->fields; i++)
   {
     char *val = PQgetisnull(dbr->res, dbr->fetched, i) ? NULL: PQgetvalue(dbr->res, dbr->fetched, i);
-    array_set(row, i, strf("%s", val));
+    array_set(dbr->row_array, i, val ? strf("%s", val): NULL);
   }
   dbr->fetched++;
-  return row;
+  return dbr->row_array;
 }
 
 dbr_t*
@@ -2274,6 +2332,9 @@ db_query (db_t *db, const char *query)
 {
   dbr_t *dbr = allocate(sizeof(dbr_t));
   dbr->res = PQexec(db->conn, query);
+
+  dbr->row_map   = NULL;
+  dbr->row_array = NULL;
 
   ExecStatusType rs = PQresultStatus(dbr->res);
 
@@ -2290,6 +2351,9 @@ db_query (db_t *db, const char *query)
   dbr->fields   = PQnfields(dbr->res);
   return dbr;
 }
+
+#define db_queryf(db,...) ({ char *_s = strf(__VA_ARGS__); \
+  dbr_t *_r = db_query((db), _s); free(_s); _r; })
 
 char*
 db_quote_field (db_t *db, const char *field)
@@ -2341,6 +2405,7 @@ db_connect (db_t *db, const char *dbhost, const char *dbname, const char *dbuser
   if (PQstatus(db->conn) != CONNECTION_OK)
   {
     errorf("PostgresSQL connect failed: %s", PQerrorMessage(db->conn));
+    PQfinish(db->conn);
     return EXIT_FAILURE;
   }
   return EXIT_SUCCESS;
