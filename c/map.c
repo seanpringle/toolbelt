@@ -161,17 +161,9 @@ map_set (map_t *map, void *key, void *val)
 
   vector_t *vector = &map->chains[chain];
 
-  off_t pos = 0;
   vector_each(vector, map_node_t *node)
   {
-    int cmp = map->compare(node->key, key);
-    if (cmp < 0)
-      pos = loop.index+1;
-    else
-    if (cmp > 0)
-      break;
-    else
-    if (cmp == 0)
+    if (map->compare(node->key, key) == 0)
     {
       node->key = key;
       node->val = val;
@@ -184,7 +176,7 @@ map_set (map_t *map, void *key, void *val)
   node->val = val;
   node->hash = hv;
 
-  vector_ins(vector, pos, node);
+  vector_push(vector, node);
   map->count++;
 
   if (map->count > map->width * map->depth)
@@ -210,11 +202,8 @@ map_find (map_t *map, void *key)
   vector_t *vector = &map->chains[chain];
 
   vector_each(vector, map_node_t *node)
-  {
-    int cmp = map->compare(node->key, key);
-    if (cmp == 0) return node;
-    if (cmp  > 0) break;
-  }
+    if (map->compare(node->key, key) == 0) return node;
+
   return NULL;
 }
 
@@ -242,10 +231,7 @@ map_del (map_t *map, void *key)
 
   vector_each(vector, map_node_t *node)
   {
-    int cmp = map->compare(node->key, key);
-    if (cmp  > 0) break;
-
-    if (cmp == 0)
+    if (map->compare(node->key, key) == 0)
     {
       void *ptr = node->val;
       vector_del(vector, loop.index);
