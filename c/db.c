@@ -152,7 +152,8 @@ db_quote_field (db_t *db, const char *field)
 char*
 db_quote_value (db_t *db, const char *value)
 {
-  return str_encode((char*)value, STR_ENCODE_SQL);
+  //return str_encode((char*)value, STR_ENCODE_SQL);
+  return PQescapeLiteral(db->conn, value, strlen(value));
 }
 
 void
@@ -178,6 +179,9 @@ db_command (db_t *db, const char *query)
 {
   dbr_free(db_query(db, query));
 }
+
+#define db_commandf(db,...) ({ char *_s = strf(__VA_ARGS__); \
+  db_command((db), _s); free(_s); NULL; })
 
 int
 db_connect (db_t *db, const char *dbhost, const char *dbname, const char *dbuser, const char *dbpass)
