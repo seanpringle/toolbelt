@@ -55,6 +55,7 @@ djb_hash (char *str)
   return hash;
 }
 
+#include "c/time.c"
 #include "c/str.c"
 #include "c/text.c"
 #include "c/file.c"
