@@ -143,12 +143,8 @@ thread_wait (thread_t *thread)
 void
 thread_free (thread_t *thread)
 {
-  int rc = pthread_mutex_destroy(&thread->mutex);
-  ensure(rc == 0) { HERE; errorf("%d", rc); }
-
-  rc = pthread_cond_destroy(&thread->cond);
-  ensure(rc == 0) { HERE; errorf("%d", rc); }
-
+  ensure(pthread_mutex_destroy(&thread->mutex) == 0) HERE;
+  ensure(pthread_cond_destroy(&thread->cond) == 0) HERE;
   free(thread);
 }
 
