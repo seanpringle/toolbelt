@@ -81,6 +81,7 @@ thread_new ()
   ensure(pthread_mutex_init(&thread->mutex, NULL) == 0) HERE;
   ensure(pthread_cond_init(&thread->cond, NULL) == 0) HERE;
 
+  errorf("all_threads %lu", vector_count(all_threads));
   thread->id = vector_count(all_threads);
   vector_push(all_threads, thread);
 
