@@ -183,13 +183,13 @@ singlethreaded ()
     {
       mutex_lock(&thread->mutex);
       ensure(thread_join(thread) == 0) HERE;
+      mutex_unlock(&thread->mutex);
       thread_free(thread);
     }
   }
   vector_free(all_threads);
   all_threads = NULL;
 
-  mutex_lock(&self->mutex);
   thread_free(self);
 
   ensure(pthread_key_delete(_key_self) == 0) HERE;
