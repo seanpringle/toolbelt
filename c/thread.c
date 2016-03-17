@@ -2,8 +2,8 @@
 
 #include <pthread.h>
 
-#define mutex_lock(m) ensure(pthread_mutex_lock((m)) == 0) HERE
-#define mutex_unlock(m) ensure(pthread_mutex_unlock((m)) == 0) HERE
+#define mutex_lock(m) ensure0(pthread_mutex_lock((m)))
+#define mutex_unlock(m) ensure0(pthread_mutex_unlock((m)))
 
 typedef int (*thread_main)(void*);
 
@@ -78,8 +78,8 @@ thread_new ()
 
   thread_t *thread = allocate(sizeof(thread_t));
   memset(thread, 0, sizeof(thread_t));
-  ensure(pthread_mutex_init(&thread->mutex, NULL) == 0) HERE;
-  ensure(pthread_cond_init(&thread->cond, NULL) == 0) HERE;
+  ensure0(pthread_mutex_init(&thread->mutex, NULL));
+  ensure0(pthread_cond_init(&thread->cond, NULL));
 
   thread->id = vector_count(all_threads);
   vector_push(all_threads, thread);
@@ -92,7 +92,7 @@ void*
 thread_run (void *ptr)
 {
   thread_t *thread = (thread_t*)ptr;
-  ensure(pthread_setspecific(_key_self, thread) == 0) HERE;
+  ensure0(pthread_setspecific(_key_self, thread));
 
   int error = thread->main(thread->payload);
 
@@ -143,8 +143,8 @@ thread_wait (thread_t *thread)
 void
 thread_free (thread_t *thread)
 {
-  ensure(pthread_mutex_destroy(&thread->mutex) == 0) HERE;
-  ensure(pthread_cond_destroy(&thread->cond) == 0) HERE;
+  ensure0(pthread_mutex_destroy(&thread->mutex));
+  ensure0(pthread_cond_destroy(&thread->cond));
   free(thread);
 }
 
@@ -160,11 +160,11 @@ thread_running (thread_t *thread)
 void
 multithreaded ()
 {
-  ensure(pthread_key_create(&_key_self, NULL) == 0) HERE;
-  ensure(pthread_mutex_init(&all_threads_mutex, NULL) == 0) HERE;
+  ensure0(pthread_key_create(&_key_self, NULL));
+  ensure0(pthread_mutex_init(&all_threads_mutex, NULL));
   all_threads = vector_new();
 
-  ensure(pthread_setspecific(_key_self, thread_new()) == 0) HERE;
+  ensure0(pthread_setspecific(_key_self, thread_new()));
   self->started = 1;
 }
 
@@ -178,7 +178,7 @@ singlethreaded ()
     if (thread != self)
     {
       mutex_lock(&thread->mutex);
-      ensure(thread_join(thread) == 0) HERE;
+      ensure0(thread_join(thread));
       mutex_unlock(&thread->mutex);
       thread_free(thread);
     }
@@ -187,18 +187,18 @@ singlethreaded ()
   all_threads = NULL;
 
   thread_free(self);
-  ensure(pthread_key_delete(_key_self) == 0) HERE;
+  ensure0(pthread_key_delete(_key_self));
 
   mutex_unlock(&all_threads_mutex);
-  ensure(pthread_mutex_destroy(&all_threads_mutex) == 0) HERE;
+  ensure0(pthread_mutex_destroy(&all_threads_mutex));
 }
 
 channel_t*
 channel_new (size_t limit)
 {
   channel_t *channel = allocate(sizeof(channel_t));
-  ensure(pthread_mutex_init(&channel->mutex, NULL) == 0) HERE;
-  ensure(pthread_cond_init(&channel->write_cond, NULL) == 0) HERE;
+  ensure0(pthread_mutex_init(&channel->mutex, NULL));
+  ensure0(pthread_cond_init(&channel->write_cond, NULL));
   channel->queue = list_new();
   channel->readers = list_new();
   channel->handled = 0;
@@ -209,8 +209,8 @@ channel_new (size_t limit)
 void
 channel_free (channel_t *channel)
 {
-  ensure(pthread_mutex_destroy(&channel->mutex) == 0) HERE;
-  ensure(pthread_cond_destroy(&channel->write_cond) == 0) HERE;
+  ensure0(pthread_mutex_destroy(&channel->mutex));
+  ensure0(pthread_cond_destroy(&channel->write_cond));
   list_free(channel->queue);
   list_free(channel->readers);
   free(channel);
