@@ -168,11 +168,11 @@ multithreaded ()
 void
 singlethreaded ()
 {
-  pthread_mutex_lock(&all_threads_mutex);
+  ensure(pthread_mutex_lock(&all_threads_mutex) == 0) HERE;
 
   vector_each(all_threads, thread_t *thread)
   {
-    pthread_mutex_lock(&thread->mutex);
+    ensure(pthread_mutex_lock(&thread->mutex) == 0);
     ensure(thread_join(thread) == 0);
     thread_free(thread);
   }
