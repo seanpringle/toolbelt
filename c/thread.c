@@ -144,10 +144,10 @@ void
 thread_free (thread_t *thread)
 {
   int rc = pthread_mutex_destroy(&thread->mutex);
-  ensure(rc == 0) HERE;
+  ensure(rc == 0) { HERE; errorf("%d", rc); }
 
   rc = pthread_cond_destroy(&thread->cond);
-  ensure(rc == 0) HERE;
+  ensure(rc == 0) { HERE; errorf("%d", rc); }
 
   free(thread);
 }
