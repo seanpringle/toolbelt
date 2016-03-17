@@ -188,12 +188,8 @@ singlethreaded ()
   mutex_lock(&self->mutex);
   thread_free(self);
 
-  int rc = pthread_key_delete(_key_self);
-
-  if (rc != 0)
-    errorf("singlethreaded (key delete): %d", rc);
-
-  pthread_mutex_destroy(&all_threads_mutex);
+  ensure(pthread_key_delete(_key_self) == 0) HERE;
+  ensure(pthread_mutex_destroy(&all_threads_mutex) == 0) HERE;
 }
 
 channel_t*
