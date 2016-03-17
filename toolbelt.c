@@ -19,7 +19,7 @@
 
 #define ensure(x) for ( ; !(x) ; exit(EXIT_FAILURE) )
 #define errorf(...) do { fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); } while(0)
-#define ensure0(x) ({ int _rc = (x); ensure(_rc == 0) errorf("file %s func %s line %d error %d", __FILE__, __func__, __LINE__, _rc); 0; })
+#define assert0(x) ({ int _rc = (x); ensure(_rc == 0) errorf("file %s func %s line %d error %d", __FILE__, __func__, __LINE__, _rc); 0; })
 
 #define min(a,b) ({ __typeof__(a) _a = (a); __typeof__(b) _b = (b); _a < _b ? _a: _b; })
 #define max(a,b) ({ __typeof__(a) _a = (a); __typeof__(b) _b = (b); _a > _b ? _a: _b; })
