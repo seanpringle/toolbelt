@@ -81,7 +81,6 @@ thread_new ()
   ensure(pthread_mutex_init(&thread->mutex, NULL) == 0) HERE;
   ensure(pthread_cond_init(&thread->cond, NULL) == 0) HERE;
 
-  errorf("all_threads %lu", vector_count(all_threads));
   thread->id = vector_count(all_threads);
   vector_push(all_threads, thread);
 
@@ -176,14 +175,17 @@ singlethreaded ()
 
   vector_each(all_threads, thread_t *thread)
   {
-    mutex_lock(&thread->mutex);
-    ensure(thread_join(thread) == 0) HERE;
-    thread_free(thread);
+    if (thread != self)
+    {
+      mutex_lock(&thread->mutex);
+      ensure(thread_join(thread) == 0) HERE;
+      thread_free(thread);
+    }
   }
   vector_free(all_threads);
   all_threads = NULL;
 
-  free(self);
+  thread_free(self);
 
   int rc = pthread_key_delete(_key_self);
 
