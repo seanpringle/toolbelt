@@ -38,7 +38,7 @@ vector_t *all_threads;
 int
 thread_join (thread_t *thread)
 {
-  int ok = 1;
+  int rs = 0;
 
   if (thread->started && !thread->joined)
   {
@@ -50,10 +50,10 @@ thread_join (thread_t *thread)
     else
     {
       errorf("thread_join: %d", rc);
-      ok = 0;
+      rs = 1;
     }
   }
-  return ok;
+  return rs;
 }
 
 thread_t*
@@ -64,9 +64,8 @@ thread_new ()
   vector_each(all_threads, thread_t *t)
   {
     pthread_mutex_lock(&t->mutex);
-    if (t->stopped)
+    if (t->stopped && thread_join(t) == 0)
     {
-      thread_join(t);
       pthread_mutex_unlock(&t->mutex);
       pthread_mutex_unlock(&all_threads_mutex);
       return t;
@@ -106,7 +105,8 @@ thread_start (thread_t *thread, thread_main main, void *payload)
 {
   pthread_mutex_lock(&thread->mutex);
 
-  thread_join(thread);
+  if (thread_join(thread) != 0)
+    return EXIT_FAILURE;
 
   thread->main    = main;
   thread->payload = payload;
@@ -131,8 +131,8 @@ int
 thread_wait (thread_t *thread)
 {
   pthread_mutex_lock(&thread->mutex);
-  thread_join(thread);
-  int rc = thread->error;
+  int rc = thread_join(thread);
+  if (!rc) rc = thread->error;
   pthread_mutex_unlock(&thread->mutex);
   return rc;
 }
@@ -173,7 +173,7 @@ singlethreaded ()
   vector_each(all_threads, thread_t *thread)
   {
     pthread_mutex_lock(&thread->mutex);
-    thread_join(thread);
+    ensure(thread_join(thread) == 0);
     thread_free(thread);
   }
   vector_free(all_threads);
