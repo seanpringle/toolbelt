@@ -209,7 +209,6 @@ channel_new (size_t limit)
 void
 channel_free (channel_t *channel)
 {
-  mutex_lock(&channel->mutex);
   ensure(pthread_mutex_destroy(&channel->mutex) == 0) HERE;
   ensure(pthread_cond_destroy(&channel->write_cond) == 0) HERE;
   list_free(channel->queue);
