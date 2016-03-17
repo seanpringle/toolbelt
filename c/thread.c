@@ -185,6 +185,7 @@ singlethreaded ()
   vector_free(all_threads);
   all_threads = NULL;
 
+  mutex_lock(&self->mutex);
   thread_free(self);
 
   int rc = pthread_key_delete(_key_self);
