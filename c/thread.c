@@ -189,7 +189,7 @@ singlethreaded ()
   thread_free(self);
   ensure(pthread_key_delete(_key_self) == 0) HERE;
 
-  mutex_unlock(all_threads_mutex);
+  mutex_unlock(&all_threads_mutex);
   ensure(pthread_mutex_destroy(&all_threads_mutex) == 0) HERE;
 }
 
