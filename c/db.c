@@ -212,6 +212,8 @@ typedef struct {
   vector_t *fields;
   vector_t *where;
   vector_t *order;
+  size_t offset;
+  size_t limit;
   char *query;
 } sql_t;
 
@@ -285,6 +287,20 @@ sql_order (sql_t *sql, char *field, char *direction)
   char *f = db_quote_field(sql->db, field);
   vector_push(sql->order, strf("%s %s", f, direction));
   free(f);
+  return sql;
+}
+
+sql_t*
+sql_offset(sql_t *sql, size_t offset)
+{
+  sql->offset = offset;
+  return sql;
+}
+
+sql_t*
+sql_limit(sql_t *sql, size_t limit)
+{
+  sql->limit = limit;
   return sql;
 }
 
