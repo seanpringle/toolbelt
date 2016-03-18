@@ -352,6 +352,9 @@ sql_get_select (sql_t *sql, char *comment)
   text_free(where);
   text_free(order);
 
+  free(offset);
+  free(limit);
+
   return sql->query;
 }
 
