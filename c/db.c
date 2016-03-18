@@ -227,6 +227,8 @@ sql_new (db_t *db)
   sql->alias = NULL;
   sql->table = NULL;
   sql->query = NULL;
+  sql->offset = 0;
+  sql->limit = 0;
 
   sql->tables = map_new();
   sql->tables->clear = map_clear_free;
