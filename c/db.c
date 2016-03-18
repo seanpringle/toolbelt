@@ -47,12 +47,6 @@ dbr_selected (dbr_t *dbr)
   return dbr ? dbr->selected: 0;
 }
 
-size_t
-dbr_fetched (dbr_t *dbr)
-{
-  return dbr ? dbr->fetched: 0;
-}
-
 array_t*
 dbr_fields (dbr_t *dbr)
 {
@@ -146,7 +140,7 @@ db_query (db_t *db, const char *query)
 char*
 db_quote_field (db_t *db, const char *field)
 {
-  return strchr(field, '.') ? strf("%s", field) : strf("\"%s\"", field);
+  return strchr(field, '.') || strchr(field, ' ') || strchr(field, '(') ? strf("%s", field) : strf("\"%s\"", field);
 }
 
 char*
@@ -207,6 +201,188 @@ void
 db_close (db_t *db)
 {
   PQfinish(db->conn);
+}
+
+typedef struct {
+  db_t *db;
+  dbr_t *dbr;
+  char *alias;
+  char *table;
+  map_t *tables;
+  vector_t *fields;
+  vector_t *where;
+  vector_t *order;
+  char *query;
+} sql_t;
+
+sql_t*
+sql_new (db_t *db)
+{
+  sql_t *sql = allocate(sizeof(sql_t));
+  sql->db = db;
+  sql->dbr = NULL;
+
+  sql->alias = NULL;
+  sql->table = NULL;
+  sql->query = NULL;
+
+  sql->tables = map_new();
+  sql->tables->clear = map_clear_free;
+
+  sql->fields = vector_new();
+  sql->fields->clear = vector_clear_free;
+
+  sql->where = vector_new();
+  sql->where->clear = vector_clear_free;
+
+  sql->order = vector_new();
+  sql->order->clear = vector_clear_free;
+
+  return sql;
+}
+
+sql_t*
+sql_table (sql_t *sql, char *alias, char *table)
+{
+  sql->alias = strf("%s", alias);
+  sql->table = strf("%s", table);
+  return sql;
+}
+
+sql_t*
+sql_join (sql_t *sql, char *alias, char *table)
+{
+  map_set(sql->tables, strf("%s", alias), strf("%s", table));
+  return sql;
+}
+
+sql_t*
+sql_where_raw (sql_t *sql, char *clause)
+{
+  vector_push(sql->where, strf("%s", clause));
+  return sql;
+}
+
+#define sql_wheref(sql,...) ({ sql_t *_s = (sql); vector_push(_s->where, strf(__VA_ARGS__)); _s; })
+
+sql_t*
+sql_where (sql_t *sql, char *field, char *op, char *value)
+{
+  char *f = db_quote_field(sql->db, field);
+  char *v = db_quote_value(sql->db, value);
+  sql_wheref(sql, "%s %s %s", f, op, v);
+  free(f);
+  free(v);
+  return sql;
+}
+
+#define sql_where_eq(sql,field,value) sql_where((sql),(field),"=",(value))
+#define sql_where_re(sql,field,value) sql_where((sql),(field),"~",(value))
+
+sql_t*
+sql_order (sql_t *sql, char *field, char *direction)
+{
+  char *f = db_quote_field(sql->db, field);
+  vector_push(sql->order, strf("%s %s", f, direction));
+  free(f);
+  return sql;
+}
+
+char*
+sql_get_select (sql_t *sql, char *comment)
+{
+  text_t *tables = textf("%s as %s", sql->table, sql->alias);
+
+  map_each(sql->tables, char *alias, char *name)
+    textf_ins(tables, "JOIN %s as %s", alias, name);
+
+  text_t *fields = textf("");
+
+  vector_each(sql->fields, char *field)
+    textf_ins(fields, "%s,", field);
+
+  text_trim(fields, iscomma);
+
+  if (!text_count(fields))
+    text_set(fields, "*");
+
+  text_t *where = textf("WHERE 1=1");
+
+  vector_each(sql->where, char *clause)
+    textf_ins(where, " and %s", clause);
+
+  text_t *order = textf("");
+
+  vector_each(sql->order, char *clause)
+    text_ins(order, clause);
+
+  if (text_count(order))
+  {
+    text_home(order);
+    text_ins(order, "ORDER BY ");
+  }
+
+  free(sql->query);
+
+  sql->query = strf("SELECT /* %s */ %s FROM %s %s",
+    comment, text_get(fields), text_get(tables), text_get(where), text_get(order)
+  );
+
+  text_free(fields);
+  text_free(tables);
+  text_free(where);
+  text_free(order);
+
+  return sql->query;
+}
+
+dbr_t*
+sql_select (sql_t *sql, char *comment)
+{
+  dbr_free(sql->dbr);
+  sql->dbr = db_query(sql->db, sql_get_select(sql, comment));
+  return sql->dbr;
+}
+
+size_t
+sql_selected (sql_t *sql)
+{
+  return dbr_selected(sql->dbr);
+}
+
+size_t
+sql_affected (sql_t *sql)
+{
+  return dbr_affected(sql->dbr);
+}
+
+map_t*
+sql_fetch_map (sql_t *sql)
+{
+  return dbr_fetch_map(sql->dbr);
+}
+
+array_t*
+sql_fetch_array (sql_t *sql)
+{
+  return dbr_fetch_array(sql->dbr);
+}
+
+void
+sql_free (sql_t *sql)
+{
+  if (sql)
+  {
+    free(sql->alias);
+    free(sql->table);
+    free(sql->query);
+    map_free(sql->tables);
+    vector_free(sql->fields);
+    vector_free(sql->where);
+    vector_free(sql->order);
+    dbr_free(sql->dbr);
+    free(sql);
+  }
 }
 
 #endif
