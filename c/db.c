@@ -340,8 +340,11 @@ sql_get_select (sql_t *sql, char *comment)
 
   free(sql->query);
 
-  sql->query = strf("SELECT /* %s */ %s FROM %s %s",
-    comment, text_get(fields), text_get(tables), text_get(where), text_get(order)
+  char *offset = sql->offset ? strf("OFFSET %lu", sql->offset): strf("");
+  char *limit  = sql->limit  ? strf("LIMIT  %lu", sql->limit) : strf("");
+
+  sql->query = strf("SELECT /* %s */ %s FROM %s %s %s %s",
+    comment, text_get(fields), text_get(tables), text_get(where), text_get(order), offset, limit
   );
 
   text_free(fields);
