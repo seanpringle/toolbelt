@@ -328,6 +328,11 @@ sql_where (sql_t *sql, char *field, char *op, char *value)
 #define sql_where_eq(sql,field,value) sql_where((sql),(field),"=",(value))
 #define sql_where_re(sql,field,value) sql_where((sql),(field),"~",(value))
 
+#define sql_where_gt(sql,field,value) sql_where((sql),(field),">",(value))
+#define sql_where_gte(sql,field,value) sql_where((sql),(field),">=",(value))
+#define sql_where_lt(sql,field,value) sql_where((sql),(field),"<",(value))
+#define sql_where_lte(sql,field,value) sql_where((sql),(field),"<=",(value))
+
 sql_t*
 sql_order (sql_t *sql, char *field, char *direction)
 {
