@@ -9,6 +9,7 @@ typedef struct _db_t {
 
 #define DB_LOG_ERRORS (1<<0)
 #define DB_LOG_QUERIES (1<<1)
+#define DB_LOG_EXPLAIN (1<<2)
 
 typedef struct _dbr_t {
   db_t *db;
@@ -133,9 +134,26 @@ db_query (db_t *db, const char *query)
   if (db->flags & DB_LOG_QUERIES)
     errorf("%s", query);
 
-  dbr_t *dbr = allocate(sizeof(dbr_t));
-  dbr->res = PQexec(db->conn, query);
+  if (db->flags & DB_LOG_EXPLAIN)
+  {
+    db_clr(db, DB_LOG_EXPLAIN);
 
+    char *explain = strf("EXPLAIN %s", query);
+    dbr_t *dbr = db_query(db, explain);
+
+    while (dbr_fetch_map(dbr))
+    {
+      map_each(dbr->row_map, char *key, char *val)
+        errorf("%s => %s", key, val);
+    }
+
+    dbr_free(dbr);
+    free(explain);
+
+    db_set(db, DB_LOG_EXPLAIN);
+  }
+
+  dbr->res = PQexec(db->conn, query);
   dbr->row_map   = NULL;
   dbr->row_array = NULL;
 
