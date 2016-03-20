@@ -20,8 +20,11 @@ text_clear (text_t *text)
 void
 text_free (text_t *text)
 {
-  text_clear(text);
-  free(text);
+  if (text)
+  {
+    text_clear(text);
+    free(text);
+  }
 }
 
 char*
