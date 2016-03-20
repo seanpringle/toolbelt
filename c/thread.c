@@ -340,12 +340,14 @@ channel_multi_read (channel_t **selected, list_t *channels)
   void *ptr = NULL;
   channel_t *from = NULL;
 
+  int ptr_found = 0;
   int waiting_channels = 0;
   list_each(channels, channel_t *channel)
   {
     mutex_lock(&channel->mutex);
     if (list_count(channel->queue))
     {
+      ptr_found = 1;
       ptr = list_shift(channel->queue);
       pthread_cond_signal(&channel->write_cond);
       from = channel;
@@ -356,10 +358,10 @@ channel_multi_read (channel_t **selected, list_t *channels)
       waiting_channels++;
     }
     mutex_unlock(&channel->mutex);
-    if (ptr) break;
+    if (ptr_found) break;
   }
 
-  if (!ptr)
+  if (!ptr_found)
   {
     mutex_lock(&self->mutex);
     self->waiting = 1;
@@ -367,6 +369,7 @@ channel_multi_read (channel_t **selected, list_t *channels)
     mutex_unlock(&self->mutex);
     ptr = self->ptr;
     from = self->channel;
+    ptr_found = 1;
   }
 
   list_each(channels, channel_t *channel)
