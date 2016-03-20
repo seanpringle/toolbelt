@@ -17,8 +17,22 @@
 #define PRIME_100000 99991
 #define PRIME_1000000 999983
 
+typedef void (*errorf_cb)(char*,...);
+
+void
+errorf_default (char *pattern, ...)
+{
+  va_list args;
+  va_start(args, pattern);
+  vfprintf(stderr, pattern, args);
+  fputc('\n', stderr);
+  va_end(args);
+}
+
+errorf_cb errorf_handler = errorf_default;
+
 #define ensure(x) for ( ; !(x) ; exit(EXIT_FAILURE) )
-#define errorf(...) do { fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); } while(0)
+#define errorf(...) errorf_handler(__VA_ARGS__)
 #define assert0(x) ({ int _rc = (x); ensure(_rc == 0) errorf("file %s func %s line %d error %d", __FILE__, __func__, __LINE__, _rc); 0; })
 
 #define min(a,b) ({ __typeof__(a) _a = (a); __typeof__(b) _b = (b); _a < _b ? _a: _b; })

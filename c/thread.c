@@ -38,6 +38,8 @@ static pthread_key_t _key_self;
 pthread_mutex_t all_threads_mutex;
 vector_t *all_threads;
 
+pthread_mutex_t mutex_stderr;
+
 int
 thread_join (thread_t *thread)
 {
@@ -158,6 +160,19 @@ thread_running (thread_t *thread)
 }
 
 void
+errorf_multithreaded (char *pattern, ...)
+{
+  mutex_lock(&mutex_stderr);
+  va_list args;
+  va_start(args, pattern);
+  vfprintf(stderr, "thread %lx: ", self);
+  vfprintf(stderr, pattern, args);
+  fputc('\n', stderr);
+  va_end(args);
+  mutex_unlock(&mutex_stderr);
+}
+
+void
 multithreaded ()
 {
   assert0(pthread_key_create(&_key_self, NULL));
@@ -166,6 +181,9 @@ multithreaded ()
 
   assert0(pthread_setspecific(_key_self, thread_new()));
   self->started = 1;
+
+  assert0(pthread_mutex_init(&mutex_stderr, NULL));
+  errorf_handler = errorf_multithreaded;
 }
 
 void
@@ -185,6 +203,9 @@ singlethreaded ()
   }
   vector_free(all_threads);
   all_threads = NULL;
+
+  errorf_handler = errorf_default;
+  assert0(pthread_mutex_destroy(&mutex_stderr));
 
   thread_free(self);
   assert0(pthread_key_delete(_key_self));
