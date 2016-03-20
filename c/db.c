@@ -131,9 +131,6 @@ db_clr (db_t *db, uint32_t flag)
 dbr_t*
 db_query (db_t *db, const char *query)
 {
-  if (db->flags & DB_LOG_QUERIES)
-    errorf("%s", query);
-
   if (db->flags & DB_LOG_EXPLAIN)
   {
     db_clr(db, DB_LOG_EXPLAIN);
@@ -151,6 +148,11 @@ db_query (db_t *db, const char *query)
     free(explain);
 
     db_set(db, DB_LOG_EXPLAIN);
+  }
+  else
+  if (db->flags & DB_LOG_QUERIES)
+  {
+    errorf("%s", query);
   }
 
   dbr_t *dbr = allocate(sizeof(dbr_t));
