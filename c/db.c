@@ -4,7 +4,11 @@
 
 typedef struct _db_t {
   PGconn *conn;
+  uint32_t flags;
 } db_t;
+
+#define DB_LOG_ERRORS (1<<0)
+#define DB_LOG_QUERIES (1<<1)
 
 typedef struct _dbr_t {
   db_t *db;
@@ -109,9 +113,26 @@ dbr_fetch_array (dbr_t *dbr)
   return dbr->row_array;
 }
 
+db_t*
+db_set (db_t *db, uint32_t flag)
+{
+  db->flags |= flag;
+  return db;
+}
+
+db_t*
+db_clr (db_t *db, uint32_t flag)
+{
+  db->flags &= ~flag;
+  return db;
+}
+
 dbr_t*
 db_query (db_t *db, const char *query)
 {
+  if (db->flags & DB_LOG_QUERIES)
+    errorf("%s", query);
+
   dbr_t *dbr = allocate(sizeof(dbr_t));
   dbr->res = PQexec(db->conn, query);
 
@@ -122,7 +143,8 @@ db_query (db_t *db, const char *query)
 
   if (rs != PGRES_TUPLES_OK && rs != PGRES_SINGLE_TUPLE && rs != PGRES_COMMAND_OK)
   {
-    errorf("PostgresSQL query failed: %s: %s", PQresultErrorMessage(dbr->res), query);
+    if (db->flags & DB_LOG_ERRORS)
+      errorf("PostgresSQL query failed: %s: %s", PQresultErrorMessage(dbr->res), query);
     dbr_free(dbr);
     return NULL;
   }
@@ -184,13 +206,15 @@ db_connect (db_t *db, const char *dbhost, const char *dbname, const char *dbuser
     dbhost, dbname, dbuser, dbpass
   );
 
-  db->conn = PQconnectdb(text_get(info));
+  db->conn  = PQconnectdb(text_get(info));
+  db->flags = DB_LOG_ERRORS;
 
   text_free(info);
 
   if (PQstatus(db->conn) != CONNECTION_OK)
   {
-    errorf("PostgresSQL connect failed: %s", PQerrorMessage(db->conn));
+    if (db->flags & DB_LOG_ERRORS)
+      errorf("PostgresSQL connect failed: %s", PQerrorMessage(db->conn));
     PQfinish(db->conn);
     return EXIT_FAILURE;
   }
