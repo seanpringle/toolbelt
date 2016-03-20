@@ -165,7 +165,7 @@ errorf_multithreaded (char *pattern, ...)
   mutex_lock(&mutex_stderr);
   va_list args;
   va_start(args, pattern);
-  vfprintf(stderr, "thread %lx: ", self);
+  vfprintf(stderr, "thread %lx: ", (uint64_t)self);
   vfprintf(stderr, pattern, args);
   fputc('\n', stderr);
   va_end(args);
