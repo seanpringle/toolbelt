@@ -153,6 +153,7 @@ db_query (db_t *db, const char *query)
     db_set(db, DB_LOG_EXPLAIN);
   }
 
+  dbr_t *dbr = allocate(sizeof(dbr_t));
   dbr->res = PQexec(db->conn, query);
   dbr->row_map   = NULL;
   dbr->row_array = NULL;
