@@ -223,7 +223,7 @@ str_encode (char *s, int format)
   if (format == STR_ENCODE_ZLIB)
   {
     int length = strlen(s) + 1;
-    result = allocate(length);
+    result = allocate(length + sizeof(size_t));
 
     z_stream zs;
     zs.zalloc = Z_NULL;
@@ -232,10 +232,11 @@ str_encode (char *s, int format)
     zs.avail_in = length;
     zs.next_in = (unsigned char*)s;
     zs.avail_out = length;
-    zs.next_out = (unsigned char*)result;
+    zs.next_out = (unsigned char*)result + sizeof(size_t);
 
     deflateInit(&zs, Z_BEST_COMPRESSION);
     deflate(&zs, Z_FINISH);
+    *((size_t*)result) = zs.total_out;
     deflateEnd(&zs);
   }
   else
