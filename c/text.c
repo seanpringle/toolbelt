@@ -175,6 +175,30 @@ text_find (text_t *text, char *str)
 }
 
 size_t
+text_ltrim (text_t *text, str_cb_ischar cb)
+{
+  if (text->buffer)
+  {
+    str_ltrim(text->buffer, cb);
+    text->bytes = strlen(text->buffer) + 1;
+    text->cursor = min(text->bytes-1, text->cursor);
+  }
+  return max(text->bytes-1, 0);
+}
+
+size_t
+text_rtrim (text_t *text, str_cb_ischar cb)
+{
+  if (text->buffer)
+  {
+    str_rtrim(text->buffer, cb);
+    text->bytes = strlen(text->buffer) + 1;
+    text->cursor = min(text->bytes-1, text->cursor);
+  }
+  return max(text->bytes-1, 0);
+}
+
+size_t
 text_trim (text_t *text, str_cb_ischar cb)
 {
   if (text->buffer)

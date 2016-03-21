@@ -82,16 +82,30 @@ str_scan (char *s, str_cb_ischar cb)
 }
 
 char*
-str_trim (char *str, str_cb_ischar cb)
+str_ltrim (char *str, str_cb_ischar cb)
 {
   char *left = str + str_skip(str, cb);
   size_t len = strlen(left);
   memmove(str, left, len+1);
+  return str;
+}
+
+char*
+str_rtrim (char *str, str_cb_ischar cb)
+{
   for (
-    char *p = left + len - 1;
+    char *p = s + strlen(str) - 1;
     p >= str && *p && cb(*p);
     *p = 0, p--
   );
+  return str;
+}
+
+char*
+str_rtrim (char *str, str_cb_ischar cb)
+{
+  str_ltrim(str, cb);
+  str_rtrim(str, cb);
   return str;
 }
 
