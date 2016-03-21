@@ -102,7 +102,7 @@ str_rtrim (char *str, str_cb_ischar cb)
 }
 
 char*
-str_rtrim (char *str, str_cb_ischar cb)
+str_trim (char *str, str_cb_ischar cb)
 {
   str_ltrim(str, cb);
   str_rtrim(str, cb);
