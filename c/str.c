@@ -1,3 +1,5 @@
+#include "zlib.h"
+
 char*
 str_fgets (FILE *file)
 {
@@ -121,6 +123,7 @@ str_copy (char *s, size_t length)
 #define STR_ENCODE_SQL 2
 #define STR_ENCODE_DQUOTE 3
 #define STR_ENCODE_JSON 4
+#define STR_ENCODE_ZLIB 5
 
 char*
 str_encode (char *s, int format)
@@ -215,6 +218,25 @@ str_encode (char *s, int format)
       return strf("%10e", dn);
 
     return str_encode(s, STR_ENCODE_DQUOTE);
+  }
+  else
+  if (format == STR_ENCODE_ZLIB)
+  {
+    int length = strlen(s) + 1;
+    result = allocate(length);
+
+    z_stream zs;
+    zs.zalloc = Z_NULL;
+    zs.zfree = Z_NULL;
+    zs.opaque = Z_NULL;
+    zs.avail_in = length;
+    zs.next_in = (unsigned char*)s;
+    zs.avail_out = length;
+    zs.next_out = (unsigned char*)result;
+
+    deflateInit(&zs, Z_BEST_COMPRESSION);
+    deflate(&zs, Z_FINISH);
+    deflateEnd(&zs);
   }
   else
   {
