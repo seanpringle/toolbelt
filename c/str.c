@@ -1,4 +1,3 @@
-#include "zlib.h"
 
 char*
 str_fgets (FILE *file)
@@ -123,7 +122,6 @@ str_copy (char *s, size_t length)
 #define STR_ENCODE_SQL 2
 #define STR_ENCODE_DQUOTE 3
 #define STR_ENCODE_JSON 4
-#define STR_ENCODE_ZLIB 5
 
 char*
 str_encode (char *s, int format)
@@ -220,27 +218,6 @@ str_encode (char *s, int format)
     return str_encode(s, STR_ENCODE_DQUOTE);
   }
   else
-  if (format == STR_ENCODE_ZLIB)
-  {
-    int length = strlen(s);
-    result = allocate(max(1024, length + sizeof(size_t) + sizeof(size_t)));
-
-    z_stream zs;
-    zs.zalloc = Z_NULL;
-    zs.zfree = Z_NULL;
-    zs.opaque = Z_NULL;
-    zs.avail_in = length;
-    zs.next_in = (unsigned char*)s;
-    zs.avail_out = max(1024, length);
-    zs.next_out = (unsigned char*)result + sizeof(size_t) + sizeof(size_t);
-
-    deflateInit(&zs, Z_BEST_COMPRESSION);
-    deflate(&zs, Z_FINISH);
-    *((size_t*)(result + sizeof(size_t) * 0)) = length;
-    *((size_t*)(result + sizeof(size_t) * 1)) = zs.total_out;
-    deflateEnd(&zs);
-  }
-  else
   {
     ensure(0)
       errorf("str_encode() unknown format: %d", format);
@@ -313,29 +290,6 @@ str_decode (char *s, char **e, int format)
       result[length++] = c;
       result[length] = 0;
     }
-  }
-  else
-  if (format == STR_ENCODE_ZLIB)
-  {
-    int slen = *((size_t*)(s + sizeof(size_t) * 0));
-    int clen = *((size_t*)(s + sizeof(size_t) * 1));
-
-    result = allocate(slen + 1);
-
-    z_stream zs;
-    zs.zalloc = Z_NULL;
-    zs.zfree = Z_NULL;
-    zs.opaque = Z_NULL;
-    zs.avail_in = clen;
-    zs.next_in = (unsigned char*)s + sizeof(size_t) + sizeof(size_t);
-    zs.avail_out = slen;
-    zs.next_out = (unsigned char*)result;
-
-    inflateInit(&zs);
-    inflate(&zs, Z_NO_FLUSH);
-    inflateEnd(&zs);
-
-    result[slen] = 0;
   }
 done:
   return result;
