@@ -320,6 +320,7 @@ sql_where (sql_t *sql, char *field, char *op, char *value)
 {
   char *f = db_quote_field(sql->db, field);
   char *v = db_quote_value(sql->db, value);
+  errorf("[%s]", v);
   sql_wheref(sql, "%s %s %s", f, op, v);
   free(f);
   free(v);
