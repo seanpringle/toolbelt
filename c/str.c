@@ -94,7 +94,7 @@ char*
 str_rtrim (char *str, str_cb_ischar cb)
 {
   for (
-    char *p = s + strlen(str) - 1;
+    char *p = str + strlen(str) - 1;
     p >= str && *p && cb(*p);
     *p = 0, p--
   );
