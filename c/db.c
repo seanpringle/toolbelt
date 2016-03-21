@@ -190,7 +190,7 @@ char*
 db_quote_value (db_t *db, const char *value)
 {
   //return str_encode((char*)value, STR_ENCODE_SQL);
-  int numeric = str_skip(value, isdigit) == strlen(value);
+  int numeric = str_skip((char*)value, isdigit) == strlen(value);
   return numeric ? strf("%s", value) : PQescapeLiteral(db->conn, value, strlen(value));
 }
 
