@@ -190,7 +190,7 @@ char*
 db_quote_value (db_t *db, const char *value)
 {
   //return str_encode((char*)value, STR_ENCODE_SQL);
-  int numeric = str_skip((char*)value, isdigit) == strlen(value);
+  int numeric = strlen(value) > 0 && str_skip((char*)value, isdigit) == strlen(value);
   return numeric ? strf("%s", value) : PQescapeLiteral(db->conn, value, strlen(value));
 }
 
@@ -320,7 +320,6 @@ sql_where (sql_t *sql, char *field, char *op, char *value)
 {
   char *f = db_quote_field(sql->db, field);
   char *v = db_quote_value(sql->db, value);
-  errorf("[%s]", v);
   sql_wheref(sql, "%s %s %s", f, op, v);
   free(f);
   free(v);
