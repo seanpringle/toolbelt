@@ -14,8 +14,8 @@
 #define ensure(x) for ( ; !(x) ; exit(EXIT_FAILURE) )
 #define errorf(...) do { fprintf(stderr, "%s %d ", __FILE__, __LINE__); fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); } while (0)
 
-#define ensure_malloc(b) ensure((b)) errorf("malloc failed"); 
-#define ensure_realloc(b) ensure((b)) errorf("realloc failed"); 
+#define ensure_malloc(b) ensure((b)) errorf("malloc failed");
+#define ensure_realloc(b) ensure((b)) errorf("realloc failed");
 
 #define min(a,b) ({ __typeof__(a) _a = (a); __typeof__(b) _b = (b); _a < _b ? _a: _b; })
 #define max(a,b) ({ __typeof__(a) _a = (a); __typeof__(b) _b = (b); _a > _b ? _a: _b; })
@@ -80,7 +80,7 @@ typedef struct _Label {
 
 typedef struct _Node {
   word id;
-  int state;  
+  int state;
   int qp;
   int sp;
   int stack[STACK];
@@ -234,8 +234,8 @@ record (char *name, op_exec exec, word value)
     entry->next = dictionary->chains[chain];
     dictionary->chains[chain] = entry;
     entry->name = strf("%s", name);
-  }  
-  
+  }
+
   entry->exec = exec;
   entry->value = value;
 }
@@ -335,13 +335,6 @@ op_cmp (Node *this, Entry *entry)
       (this->array[this->previous] == this->array[this->current] ? FLAG_EQ: 0)
     | (this->array[this->previous] <  this->array[this->current] ? FLAG_LT: 0)
     | (this->array[this->previous] >  this->array[this->current] ? FLAG_GT: 0);
-}
-
-static void
-op_value (Node *this, Entry *entry)
-{
-  this->previous = this->current;
-  this->current = entry->value;
 }
 
 static void
@@ -453,7 +446,7 @@ op_neg (Node *this, Entry *entry)
 }
 
 static void
-op_in (Node *this, Entry *entry)
+op_read (Node *this, Entry *entry)
 {
   if (!this->qp)
   {
@@ -470,7 +463,7 @@ op_in (Node *this, Entry *entry)
 }
 
 static void
-op_out (Node *this, Entry *entry)
+op_send (Node *this, Entry *entry)
 {
   Node *that = node_id(this->current);
 
@@ -489,26 +482,39 @@ op_out (Node *this, Entry *entry)
 }
 
 static void
-op_put (Node *this, Entry *entry)
+op_msg (Node *this, Entry *entry)
 {
-  if (!this->compose)
-  {
-    ensure_malloc((this->compose = malloc(sizeof(word)*2)));
-    this->compose[0] = 0;
-  }
-  else
-  {
-    ensure_realloc((this->compose = realloc(this->compose, sizeof(word)*(this->compose[0]+2))));
-  }
+  word length = this->array[this->current];
 
-  this->compose[0] += 1;
-  this->compose[this->compose[0]] = this->array[this->current];
+  free(this->compose);
+  ensure_malloc((this->compose = malloc(sizeof(word) * (length+1))));
+  this->compose[0] = length;
+
+  for (word i = 0; i < length; i++)
+    this->compose[i+1] = 0;
+}
+
+static void
+op_set (Node *this, Entry *entry)
+{
+  word offset = this->array[this->current];
+  word length = this->compose[0];
+
+  ensure(offset >= 0 && offset < length) errorf("message access out of bounds");
+  this->compose[offset] = this->array[this->previous];
 }
 
 static void
 op_get (Node *this, Entry *entry)
 {
   this->array[this->current] = this->receive[this->array[this->previous]+1];
+}
+
+static void
+op_node (Node *this, Entry *entry)
+{
+  this->previous = this->current;
+  this->current = entry->value;
 }
 
 static int
@@ -521,7 +527,7 @@ tick (Node *this)
     this->state = OK;
 
     char string[STRING];
-    
+
     Entry *entry = NULL;
 
     while (this->state == OK && this->script[0])
@@ -674,9 +680,9 @@ main(int argc, char *argv[])
   record("xor",  op_xor,  0);
   record("shl",  op_shl,  0);
   record("shr",  op_shr,  0);
-  record("read", op_in,   0);
-  record("send", op_out,  0);
-  record("put",  op_put,  0);
+  record("read", op_read, 0);
+  record("send", op_send, 0);
+  record("set",  op_set,  0);
   record("get",  op_get,  0);
   record("self", op_self, 0);
   record("call", op_call, 0);
@@ -721,7 +727,7 @@ main(int argc, char *argv[])
             code[st.st_size] = 0;
 
             node_new(id, name, code);
-            record(name, op_value, id);
+            record(name, op_node, id);
             id++;
           }
         }
@@ -773,7 +779,7 @@ main(int argc, char *argv[])
     {
       word inputs = 0;
       word paused = 0;
-      
+
       node = nodes;
       while (node)
       {
@@ -801,7 +807,7 @@ main(int argc, char *argv[])
       state = EXIT_FAILURE;
       errorf("%s aborted", node->name);
     }
-    
+
     node = node->next;
   }
 
