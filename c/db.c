@@ -13,11 +13,11 @@ typedef struct _db_t {
 
 typedef struct _dbr_t {
   db_t *db;
-  PGresult *res;
   size_t affected;
   size_t selected;
   size_t fetched;
-  size_t fields;
+  array_t *columns;
+  vector_t *results;
   map_t *row_map;
   array_t *row_array;
 } dbr_t;
@@ -25,7 +25,14 @@ typedef struct _dbr_t {
 void
 dbr_clear (dbr_t *dbr)
 {
-  PQclear(dbr->res);
+  array_free(dbr->columns);
+  dbr->columns = NULL;
+
+  vector_each(dbr->results, array_t *row)
+    array_free(row);
+
+  vector_free(dbr->results);
+  dbr->results = NULL;
 }
 
 void
@@ -55,24 +62,22 @@ dbr_selected (dbr_t *dbr)
 array_t*
 dbr_fields (dbr_t *dbr)
 {
-  if (!dbr)
+  if (!dbr || !dbr->columns || !dbr->results)
     return NULL;
 
-  array_t *array = array_new(dbr->fields);
+  array_t *array = array_new(dbr->columns->width);
   array->clear = array_clear_free;
 
-  for (size_t i = 0; i < dbr->fields; i++)
-  {
-    char *key = PQfname(dbr->res, i);
-    array_set(array, i, strf("%s", key));
-  }
+  array_each(dbr->columns, char *key)
+    array_set(array, loop.index, strf("%s", key));
+
   return array;
 }
 
 map_t*
 dbr_fetch_map (dbr_t *dbr)
 {
-  if (!dbr)
+  if (!dbr || !dbr->columns || !dbr->results)
     return NULL;
 
   if (dbr->fetched == dbr->selected)
@@ -82,12 +87,14 @@ dbr_fetch_map (dbr_t *dbr)
   dbr->row_map = map_new();
   dbr->row_map->clear = map_clear_free;
 
-  for (size_t i = 0; i < dbr->fields; i++)
+  array_t *row = vector_get(dbr->results, dbr->fetched);
+
+  array_each(dbr->columns, char *key)
   {
-    char *key = PQfname(dbr->res, i);
-    char *val = PQgetisnull(dbr->res, dbr->fetched, i) ? NULL: PQgetvalue(dbr->res, dbr->fetched, i);
+    char *val = array_get(row, loop.index);
     map_set(dbr->row_map, strf("%s", key), val ? strf("%s", val): NULL);
   }
+
   dbr->fetched++;
   return dbr->row_map;
 }
@@ -95,21 +102,24 @@ dbr_fetch_map (dbr_t *dbr)
 array_t*
 dbr_fetch_array (dbr_t *dbr)
 {
-  if (!dbr)
+  if (!dbr || !dbr->columns || !dbr->results)
     return NULL;
 
   if (dbr->fetched == dbr->selected)
     return NULL;
 
   array_free(dbr->row_array);
-  dbr->row_array = array_new(dbr->fields);
+  dbr->row_array = array_new(dbr->columns->width);
   dbr->row_array->clear = array_clear_free;
 
-  for (size_t i = 0; i < dbr->fields; i++)
+  array_t *row = vector_get(dbr->results, dbr->fetched);
+
+  for (size_t ci = 0; ci < dbr->columns->width; ci++)
   {
-    char *val = PQgetisnull(dbr->res, dbr->fetched, i) ? NULL: PQgetvalue(dbr->res, dbr->fetched, i);
-    array_set(dbr->row_array, i, val ? strf("%s", val): NULL);
+    char *val = array_get(row, ci);
+    array_set(dbr->row_array, ci, val ? strf("%s", val): NULL);
   }
+
   dbr->fetched++;
   return dbr->row_array;
 }
@@ -155,25 +165,68 @@ db_query (db_t *db, const char *query)
     errorf("%s", query);
   }
 
-  dbr_t *dbr = allocate(sizeof(dbr_t));
-  dbr->res = PQexec(db->conn, query);
-  dbr->row_map   = NULL;
-  dbr->row_array = NULL;
-
-  ExecStatusType rs = PQresultStatus(dbr->res);
-
-  if (rs != PGRES_TUPLES_OK && rs != PGRES_SINGLE_TUPLE && rs != PGRES_COMMAND_OK)
+  if (!PQsendQuery(db->conn, query) || !PQconsumeInput(db->conn))
   {
     if (db->flags & DB_LOG_ERRORS)
-      errorf("PostgresSQL query failed: %s: %s", PQresultErrorMessage(dbr->res), query);
-    dbr_free(dbr);
+      errorf("PostgresSQL query failed: %s: %s", PQerrorMessage(db->conn), query);
     return NULL;
   }
 
-  dbr->affected = strtoll(PQcmdTuples(dbr->res), NULL, 0);
-  dbr->selected = PQntuples(dbr->res);
-  dbr->fetched  = 0;
-  dbr->fields   = PQnfields(dbr->res);
+  dbr_t *dbr = allocate(sizeof(dbr_t));
+  dbr->row_map   = NULL;
+  dbr->row_array = NULL;
+  dbr->columns   = NULL;
+  dbr->results   = NULL;
+  dbr->selected  = 0;
+  dbr->affected  = 0;
+  dbr->fetched   = 0;
+
+  // odd PQexec() poll() bug on old centos6 kernel
+  while (PQisBusy(db->conn)) usleep(1000);
+
+  PGresult *rs = NULL;
+
+  while ((rs = PQgetResult(db->conn)))
+  {
+    ExecStatusType st = PQresultStatus(rs);
+
+    if (st != PGRES_TUPLES_OK && st != PGRES_SINGLE_TUPLE && st != PGRES_COMMAND_OK)
+    {
+      if (db->flags & DB_LOG_ERRORS)
+        errorf("PostgresSQL query failed: %s: %s", PQresultErrorMessage(rs), query);
+      dbr_free(dbr);
+      return NULL;
+    }
+
+    dbr->affected += strtoll(PQcmdTuples(rs), NULL, 0);
+
+    if (!dbr->columns && PQnfields(rs))
+    {
+      dbr->columns = array_new(PQnfields(rs));
+      dbr->columns->clear = array_clear_free;
+
+      for (size_t ci = 0; ci < PQnfields(rs); ci++)
+        array_set(dbr->columns, ci, strf("%s", PQfname(rs, ci)));
+    }
+
+    for (size_t ri = 0; ri < PQntuples(rs); ri++)
+    {
+      if (!dbr->results)
+        dbr->results = vector_new();
+
+      array_t *row = array_new(PQnfields(rs));
+      row->clear = array_clear_free;
+
+      for (size_t ci = 0; ci < PQnfields(rs); ci++)
+        array_set(row, ci, PQgetisnull(rs, ri, ci) ? NULL: strf("%s", PQgetvalue(rs, ri, ci)));
+
+      vector_push(dbr->results, row);
+      dbr->selected++;
+    }
+
+    PQclear(rs);
+  }
+
   return dbr;
 }
 
