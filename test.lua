@@ -1,50 +1,47 @@
-json = require("json")
+-- HTTP
 
 request = {
+  sock = sock,
   uri = nil,
   headers = {}
 }
 
-function string.interpolate(str, vars)
-  if not vars then
-    vars = {}
-  end
-  return (
-    string.gsub(str, "({{([^}]+)}})",
-      function(whole,i)
-        if vars[i] then
-          return vars[i]
-        end
-        local f = loadstring(i)
-        return f()
-      end
-    )
-  )
+json = require("json")
+
+function string.fsub(str)
+  return string.gsub(str, "({{([^}]+)}})",
+    function(whole,i)
+      return loadstring(i)()
+    end)
 end
 
-function string.explode(str, sep)
-  local t = {}
-  for s in string.gmatch(str, "([^" .. sep .. "]+)") do
-    t[#t+1] = s
-  end
-  return t
+function string.ltrim(s)
+  return s:gsub("^%s+", "")
+end
+
+function string.rtrim(s)
+  return s:gsub("%s+$", "")
 end
 
 function string.trim(s)
-  return s:gsub("^%s+", ""):gsub("%s+$", "")
+  return s:ltrim():rtrim()
 end
 
+function print(s)
+  request.sock:write(s .. "\n")
+end
+
+local line = request.sock:read():trim()
+request.uri = line:sub(line:find("%s")+1):match("%g+")
+
 while true do
-  local line = io.read()
-  if line == nil or line:len() <= 1 then break end
+  local line = request.sock:read()
+  if line == nil then break end
 
   local line = line:trim()
+  if line:len() == 0 then break end
 
-  if line:match("^GET") then
-    request.uri = line:sub(4):match("%g+")
-  else
-    request.headers[line:match("^[^:]+")] = line:match(":.+$"):sub(3)
-  end
+  request.headers[line:match("^[^:]+")] = line:match(":.+$"):sub(3)
 end
 
 if request.uri:match("[.][^.]+$") then
